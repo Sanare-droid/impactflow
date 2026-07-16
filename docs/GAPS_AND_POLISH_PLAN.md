@@ -157,7 +157,6 @@ flowchart LR
 
 - Full Salesforce-parity CRM
 - Multi-region active-active
-- Billing/subscriptions
 - Native iOS/Android outside Expo
 
 ---
@@ -175,8 +174,8 @@ flowchart LR
 
 ---
 
-## Inventory notes (as of Epic 6 / API 0.18)
+## Inventory notes (as of Epic 7 / API 0.19)
 
-**Exists:** Full A–E stack, Epics 1–5, plus Epic 6 Integrations Hub (`docs/EPIC6_INTEGRATIONS_HUB.md`): connector registry, encrypted credentials, sync jobs, field mapping, inbound webhooks + DLQ redrive, developer portal, plugin/marketplace foundation, monitoring dashboard.
+**Exists:** Full A–E stack, Epics 1–6, plus Epic 7 Enterprise SaaS (`docs/EPIC7_ENTERPRISE.md`): white-label depth, custom domains, provider-agnostic billing, feature flags, marketplace→connector wiring, Plugin SDK, onboarding, customer success, localization packs, SSO/backup foundations, ops observability, k8s stubs.
 
-**Deferred:** Live OAuth token exchange, scheduled Kobo/ODK worker pulls, GraphQL, Twilio/WhatsApp send, native PDF engine.
+**Deferred:** Live Stripe capture, production ACME/DNS automation, full SAML/SCIM runtime, complete locale UI catalogs, multi-region active-active DR.

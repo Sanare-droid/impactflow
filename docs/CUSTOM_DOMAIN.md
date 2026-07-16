@@ -14,7 +14,7 @@ Use this when an organization enables branding with a `custom_domain`.
 1. In **White label**, set `custom_domain` and enable branding.
 2. Set `FRONTEND_URL` / `NEXT_PUBLIC_APP_URL` for the tenant hostname when terminating TLS.
 3. Ensure `BACKEND_CORS_ORIGINS` includes `https://meal.example.org`.
-4. Login should load branding via `GET /api/v1/public/branding/{slug}` (org slug still required for multi-tenant login unless you map domain → slug at the edge).
+4. Login should load branding via `GET /api/v1/public/branding/{slug}` or `GET /api/v1/public/branding-by-host?host=…` after the domain is verified in Organization admin.
 
 ## Optional edge mapping
 

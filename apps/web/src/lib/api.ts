@@ -1208,13 +1208,95 @@ export type OrgBranding = {
   accent_color?: string | null;
   logo_url?: string | null;
   favicon_url?: string | null;
+  login_background_url?: string | null;
   custom_domain?: string | null;
   support_email?: string | null;
   support_url?: string | null;
   hide_powered_by: boolean;
   is_enabled: boolean;
+  metadata?: Record<string, unknown>;
   created_at: string;
   updated_at: string;
+};
+
+export type SubscriptionPlan = {
+  id: string;
+  code: string;
+  name: string;
+  description?: string | null;
+  tier: string;
+  billing_period: string;
+  price_monthly: number;
+  price_annual: number;
+  currency: string;
+  seat_limit?: number | null;
+  storage_gb?: number | null;
+  trial_days: number;
+  features: string[];
+  is_public: boolean;
+  sort_order: number;
+};
+
+export type OrganizationSubscription = {
+  id: string;
+  organization_id: string;
+  status: string;
+  billing_period: string;
+  seats: number;
+  trial_ends_at?: string | null;
+  current_period_end?: string | null;
+  provider: string;
+  coupon_code?: string | null;
+  discount_percent: number;
+  plan?: {
+    id: string;
+    code: string;
+    name: string;
+    tier: string;
+    price_monthly: number;
+    price_annual: number;
+    currency: string;
+    seat_limit?: number | null;
+    storage_gb?: number | null;
+    features: string[];
+  } | null;
+};
+
+export type OrgDomain = {
+  id: string;
+  organization_id: string;
+  hostname: string;
+  is_primary: boolean;
+  status: string;
+  verification_token: string;
+  ssl_status: string;
+  dns_records: { type: string; name: string; value: string }[];
+  last_error?: string | null;
+};
+
+export type OnboardingState = {
+  id: string;
+  organization_id: string;
+  status: string;
+  current_step: string;
+  checklist: Record<string, boolean>;
+  sector?: string | null;
+  country_code?: string | null;
+  theme_preset?: string | null;
+  completed_at?: string | null;
+};
+
+export type CustomerSuccessMetrics = {
+  health_score: number;
+  adoption_pct: number;
+  active_users: number;
+  projects: number;
+  beneficiaries: number;
+  integrations: number;
+  api_keys: number;
+  onboarding_status: string;
+  recommendations: { why: string; action: string; href: string }[];
+  generated_at: string;
 };
 
 export type NotificationItem = {
@@ -2758,6 +2840,127 @@ class ApiClient {
       method: "PATCH",
       body: JSON.stringify(body),
     });
+  }
+
+  listBillingPlans() {
+    return this.request<Paginated<SubscriptionPlan>>("/billing/plans");
+  }
+
+  getSubscription() {
+    return this.request<OrganizationSubscription>("/billing/subscription");
+  }
+
+  changeSubscription(body: {
+    plan_code: string;
+    billing_period?: string;
+    seats?: number;
+    coupon_code?: string;
+  }) {
+    return this.request<OrganizationSubscription>("/billing/subscription/change", {
+      method: "POST",
+      body: JSON.stringify(body),
+    });
+  }
+
+  getFeatures(environment = "production") {
+    return this.request<{ features: Record<string, boolean>; environment: string }>(
+      `/features?environment=${encodeURIComponent(environment)}`,
+    );
+  }
+
+  listDomains() {
+    return this.request<Paginated<OrgDomain>>("/domains");
+  }
+
+  createDomain(body: { hostname: string; is_primary?: boolean }) {
+    return this.request<OrgDomain>("/domains", {
+      method: "POST",
+      body: JSON.stringify(body),
+    });
+  }
+
+  verifyDomain(domainId: string) {
+    return this.request<OrgDomain>(`/domains/${domainId}/verify`, { method: "POST" });
+  }
+
+  getOnboarding() {
+    return this.request<OnboardingState>("/onboarding");
+  }
+
+  updateOnboarding(body: Record<string, unknown>) {
+    return this.request<OnboardingState>("/onboarding", {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    });
+  }
+
+  listThemePresets() {
+    return this.request<{ items: { code: string; name: string; primary: string; secondary: string; accent: string }[] }>(
+      "/onboarding/theme-presets",
+    );
+  }
+
+  patchAdminSettings(settings: Record<string, unknown>) {
+    return this.request<{ id: string; settings: Record<string, unknown> }>("/admin/settings", {
+      method: "PATCH",
+      body: JSON.stringify({ settings }),
+    });
+  }
+
+  listBackups() {
+    return this.request<Paginated<{ id: string; label: string; status: string; checksum?: string; completed_at?: string; size_bytes: number }>>("/backups");
+  }
+
+  createBackup(body: { label?: string } = {}) {
+    return this.request<{ id: string; label: string; status: string; checksum?: string }>("/backups", {
+      method: "POST",
+      body: JSON.stringify(body),
+    });
+  }
+
+  exportTenantData() {
+    return this.request<Record<string, unknown>>("/backups/export");
+  }
+
+  listLocales() {
+    return this.request<Paginated<{ locale: string; name: string; native_name: string; direction: string; coverage_pct: number }>>("/locales");
+  }
+
+  getCustomerSuccess() {
+    return this.request<CustomerSuccessMetrics>("/customer-success");
+  }
+
+  getOpsObservability() {
+    return this.request<{
+      organizations: number;
+      users: number;
+      api_health: string;
+      components: { name: string; status: string }[];
+      generated_at: string;
+    }>("/ops/observability");
+  }
+
+  getPluginSdkManifest() {
+    return this.request<{
+      sdk_version: string;
+      registration_points: string[];
+      rules: string[];
+      example_manifest: Record<string, unknown>;
+    }>("/plugin-sdk/manifest");
+  }
+
+  upsertSso(body: {
+    provider: string;
+    config: Record<string, unknown>;
+    client_secret?: string;
+    enforce_sso?: boolean;
+    scim_enabled?: boolean;
+    allowed_domains?: string[];
+  }) {
+    return this.request<{ id: string; provider: string; status: string; enforce_sso: boolean }>(
+      "/sso",
+      { method: "PUT", body: JSON.stringify(body) },
+    );
   }
 
   listNotifications(params: { page?: number; status?: string } = {}) {

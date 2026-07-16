@@ -63,3 +63,27 @@ body {
 .animate-soft-pulse {
   animation: soft-pulse 4.5s ease-in-out infinite;
 }
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  .animate-fade-up,
+  .animate-soft-pulse {
+    animation: none !important;
+  }
+}
+
+.skip-link {
+  position: absolute;
+  left: -9999px;
+  top: 0;
+  z-index: 100;
+  padding: 0.75rem 1rem;
+  background: var(--brand);
+  color: var(--brand-foreground);
+  border-radius: 0 0 0.5rem 0;
+}
+.skip-link:focus {
+  left: 0;
+}

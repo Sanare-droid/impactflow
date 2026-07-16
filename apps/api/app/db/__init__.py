@@ -55,6 +55,16 @@ from app.models.workflow import (
     WorkflowSchedule,
     WorkflowVersion,
 )
+from app.models.enterprise import (
+    FeatureFlag,
+    LocalizationPack,
+    OnboardingState,
+    OrganizationDomain,
+    OrganizationSubscription,
+    SsoConfiguration,
+    SubscriptionPlan,
+    TenantBackup,
+)
 
 __all__ = [
     "Base",
@@ -119,4 +129,12 @@ __all__ = [
     "WorkflowRunStep",
     "WorkflowApproval",
     "WorkflowSchedule",
+    "SubscriptionPlan",
+    "OrganizationSubscription",
+    "FeatureFlag",
+    "OrganizationDomain",
+    "SsoConfiguration",
+    "TenantBackup",
+    "OnboardingState",
+    "LocalizationPack",
 ]

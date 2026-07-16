@@ -13,9 +13,13 @@ export default function BrandingPage() {
   const [tagline, setTagline] = useState("");
   const [primary, setPrimary] = useState("#0F766E");
   const [secondary, setSecondary] = useState("#44403C");
+  const [accent, setAccent] = useState("#14B8A6");
   const [logoUrl, setLogoUrl] = useState("");
   const [customDomain, setCustomDomain] = useState("");
   const [supportEmail, setSupportEmail] = useState("");
+  const [termsUrl, setTermsUrl] = useState("");
+  const [privacyUrl, setPrivacyUrl] = useState("");
+  const [footer, setFooter] = useState("");
   const [enabled, setEnabled] = useState(false);
   const [hidePoweredBy, setHidePoweredBy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -31,9 +35,14 @@ export default function BrandingPage() {
     setTagline(data.tagline ?? "");
     setPrimary(data.primary_color || "#0F766E");
     setSecondary(data.secondary_color || "#44403C");
+    setAccent(data.accent_color || "#14B8A6");
     setLogoUrl(data.logo_url ?? "");
     setCustomDomain(data.custom_domain ?? "");
     setSupportEmail(data.support_email ?? "");
+    const meta = data.metadata ?? {};
+    setTermsUrl(typeof meta.terms_url === "string" ? meta.terms_url : "");
+    setPrivacyUrl(typeof meta.privacy_url === "string" ? meta.privacy_url : "");
+    setFooter(typeof meta.footer === "string" ? meta.footer : "");
     setEnabled(data.is_enabled);
     setHidePoweredBy(data.hide_powered_by);
   }, [data]);
@@ -45,11 +54,22 @@ export default function BrandingPage() {
         tagline: tagline || null,
         primary_color: primary,
         secondary_color: secondary,
+        accent_color: accent,
         logo_url: logoUrl || null,
         custom_domain: customDomain || null,
         support_email: supportEmail || null,
         is_enabled: enabled,
         hide_powered_by: hidePoweredBy,
+        metadata: {
+          terms_url: termsUrl || null,
+          privacy_url: privacyUrl || null,
+          footer: footer || null,
+          css_tokens: {
+            "--brand-primary": primary,
+            "--brand-secondary": secondary,
+            "--brand-accent": accent,
+          },
+        },
       }),
     onSuccess: async () => {
       setError(null);
@@ -119,6 +139,10 @@ export default function BrandingPage() {
                   onChange={(e) => setSecondary(e.target.value)}
                 />
               </div>
+              <div>
+                <Label htmlFor="accent">Accent color</Label>
+                <Input id="accent" value={accent} onChange={(e) => setAccent(e.target.value)} />
+              </div>
               <div className="md:col-span-2">
                 <Label htmlFor="logo">Logo URL</Label>
                 <Input id="logo" value={logoUrl} onChange={(e) => setLogoUrl(e.target.value)} />
@@ -139,6 +163,27 @@ export default function BrandingPage() {
                   type="email"
                   value={supportEmail}
                   onChange={(e) => setSupportEmail(e.target.value)}
+                />
+              </div>
+              <div>
+                <Label htmlFor="terms">Terms of Service URL</Label>
+                <Input id="terms" value={termsUrl} onChange={(e) => setTermsUrl(e.target.value)} />
+              </div>
+              <div>
+                <Label htmlFor="privacy">Privacy Policy URL</Label>
+                <Input
+                  id="privacy"
+                  value={privacyUrl}
+                  onChange={(e) => setPrivacyUrl(e.target.value)}
+                />
+              </div>
+              <div className="md:col-span-2">
+                <Label htmlFor="footer">Footer / email branding</Label>
+                <Input
+                  id="footer"
+                  value={footer}
+                  onChange={(e) => setFooter(e.target.value)}
+                  placeholder="© Your Organization"
                 />
               </div>
               <label className="flex items-center gap-2 text-sm md:col-span-2">
@@ -187,6 +232,7 @@ export default function BrandingPage() {
               {!hidePoweredBy && (
                 <p className="mt-4 text-[11px] text-stone-400">Powered by ImpactFlow AI</p>
               )}
+              {footer && <p className="mt-2 text-[11px] text-stone-500">{footer}</p>}
             </div>
           </div>
         </Card>

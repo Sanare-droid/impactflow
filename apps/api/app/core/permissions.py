@@ -98,6 +98,10 @@ PERMISSION_CATALOG: list[dict[str, str]] = [
     {"code": "devices:register", "module": "devices", "action": "register", "description": "Register field devices"},
     {"code": "devices:read", "module": "devices", "action": "read", "description": "View registered field devices"},
     {"code": "devices:manage", "module": "devices", "action": "manage", "description": "Manage and revoke field devices"},
+    {"code": "billing:read", "module": "billing", "action": "read", "description": "View subscription and plans"},
+    {"code": "billing:manage", "module": "billing", "action": "manage", "description": "Change subscription and billing"},
+    {"code": "security:manage", "module": "security", "action": "manage", "description": "Manage SSO and security policies"},
+    {"code": "backups:manage", "module": "backups", "action": "manage", "description": "Create and export tenant backups"},
 ]
 
 # Default system roles and their permission codes

@@ -254,6 +254,37 @@ async def install_app(
         )
         db.add(row)
     await db.flush()
+    # Wire matching Integrations Hub connector when marketplace_code aligns
+    try:
+        from app.services.connectors import CONNECTOR_CATALOG
+        from app.services import integration_hub as hub_service
+
+        connector = next(
+            (c for c in CONNECTOR_CATALOG if c.get("marketplace_code") == app.code),
+            None,
+        )
+        if connector:
+            existing_conn = await db.scalar(
+                select(IntegrationConnection).where(
+                    IntegrationConnection.organization_id == organization_id,
+                    IntegrationConnection.provider == connector["code"],
+                )
+            )
+            if not existing_conn:
+                await hub_service.enable_connector(
+                    db,
+                    organization_id=organization_id,
+                    actor_id=actor_id,
+                    actor_email="",
+                    connector_code=connector["code"],
+                    name=app.name,
+                    config=config or {},
+                    ip_address=ip,
+                    user_agent=user_agent,
+                )
+    except Exception:
+        # Marketplace install must succeed even if connector wiring is unavailable
+        pass
     await write_audit_log(
         db,
         organization_id=organization_id,
@@ -645,7 +676,8 @@ async def update_branding(
     row = await get_branding(db, organization_id)
     for key, value in data.items():
         if key == "metadata" and value is not None:
-            row.metadata_ = value
+            # Merge metadata so partial white-label packages compose cleanly
+            row.metadata_ = {**(row.metadata_ or {}), **value}
         elif value is not None and hasattr(row, key):
             setattr(row, key, value)
     await db.flush()
@@ -698,4 +730,6 @@ async def public_branding_by_slug(db: AsyncSession, slug: str) -> Optional[dict]
         "support_email": branding.support_email,
         "support_url": branding.support_url,
         "hide_powered_by": branding.hide_powered_by,
+        "custom_domain": branding.custom_domain,
+        "metadata": branding.metadata_ or {},
     }

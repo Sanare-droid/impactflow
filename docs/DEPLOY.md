@@ -96,4 +96,6 @@ Scopes:
 ## Related
 
 - [Architecture](./ARCHITECTURE.md)  
+- [Epic 7 Enterprise SaaS](./EPIC7_ENTERPRISE.md)  
+- [Kubernetes stubs](../deploy/k8s/README.md)  
 - [Gaps & polish plan](./GAPS_AND_POLISH_PLAN.md)

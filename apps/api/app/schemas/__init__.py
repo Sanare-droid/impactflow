@@ -1790,6 +1790,7 @@ class BrandingResponse(ORMModel):
     support_url: Optional[str] = None
     hide_powered_by: bool
     is_enabled: bool
+    metadata_: dict = Field(default_factory=dict, serialization_alias="metadata")
     created_at: Any
     updated_at: Any
 
@@ -1809,6 +1810,8 @@ class PublicBrandingResponse(BaseModel):
     support_email: Optional[str] = None
     support_url: Optional[str] = None
     hide_powered_by: bool = False
+    custom_domain: Optional[str] = None
+    metadata: dict = {}
 
 
 class NotificationResponse(ORMModel):

@@ -45,6 +45,9 @@ import {
   Workflow,
   Gauge,
   Code2,
+  CreditCard,
+  Rocket,
+  HeartPulse,
   type LucideIcon,
 } from "lucide-react";
 import { useTheme } from "next-themes";
@@ -130,6 +133,7 @@ const navGroups: NavGroup[] = [
       { href: "/app/integrations", label: "Integrations", icon: Plug },
       { href: "/app/developer", label: "Developer", icon: Code2 },
       { href: "/app/branding", label: "White label", icon: Palette },
+      { href: "/app/onboarding", label: "Onboarding", icon: Rocket },
     ],
   },
   {
@@ -138,6 +142,9 @@ const navGroups: NavGroup[] = [
       { href: "/app/users", label: "Users", icon: Users },
       { href: "/app/roles", label: "Roles", icon: Shield },
       { href: "/app/organization", label: "Organization", icon: Building2 },
+      { href: "/app/billing", label: "Billing", icon: CreditCard },
+      { href: "/app/customer-success", label: "Success", icon: HeartPulse },
+      { href: "/app/ops", label: "Operations", icon: Activity },
       { href: "/app/audit", label: "Audit", icon: ScrollText },
       { href: "/app/settings", label: "Settings", icon: Settings },
     ],
@@ -158,6 +165,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="min-h-screen bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-teal-50 via-stone-50 to-stone-100 dark:from-stone-950 dark:via-stone-950 dark:to-teal-950/40">
+      <a href="#main-content" className="skip-link">
+        Skip to main content
+      </a>
       <div className="mx-auto flex min-h-screen max-w-[1400px]">
         <aside className="sticky top-0 hidden h-screen w-64 shrink-0 flex-col overflow-hidden border-r border-stone-200/70 bg-white/60 p-4 backdrop-blur-xl dark:border-stone-800 dark:bg-stone-950/50 md:flex">
           <Link href="/app" className="mb-6 shrink-0 px-2">
@@ -248,7 +258,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </div>
         </aside>
 
-        <main className="flex-1 p-4 md:p-8">
+        <main id="main-content" className="flex-1 p-4 md:p-8" tabIndex={-1}>
           <div className="mb-6 flex items-center justify-between md:hidden">
             <div className="font-display text-lg font-semibold text-teal-900 dark:text-teal-100">
               {APP_NAME}

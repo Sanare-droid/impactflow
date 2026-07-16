@@ -23,7 +23,7 @@ from app.services.connectors import get_connector, list_connectors
 from app.services.connectors import runtime as connector_runtime
 from app.services.platform import get_integration
 
-API_VERSION = "0.18.0"
+API_VERSION = "0.19.0"
 
 router = APIRouter(tags=["Integrations Hub"])
 
