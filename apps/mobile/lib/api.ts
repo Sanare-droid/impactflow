@@ -104,6 +104,80 @@ export type SurveySubmission = {
   updated_at?: string;
 };
 
+export type Task = {
+  id: string;
+  organization_id?: string;
+  project_id?: string;
+  activity_id?: string | null;
+  title: string;
+  description?: string | null;
+  status: string;
+  priority?: string | null;
+  assignee_id?: string | null;
+  due_date?: string | null;
+  completed_at?: string | null;
+  updated_at?: string;
+};
+
+export type Notification = {
+  id: string;
+  organization_id?: string;
+  user_id?: string;
+  event_type?: string;
+  title: string;
+  body?: string | null;
+  link?: string | null;
+  severity?: string | null;
+  status?: string | null;
+  read_at?: string | null;
+  created_at?: string;
+  updated_at?: string;
+};
+
+export type Device = {
+  id: string;
+  organization_id: string;
+  user_id: string;
+  device_key: string;
+  name: string;
+  platform: string;
+  app_version?: string | null;
+  status: string;
+  last_seen_at?: string | null;
+  last_sync_at?: string | null;
+  storage_bytes?: number;
+  pending_uploads?: number;
+};
+
+export type SyncMutationItem = {
+  client_mutation_id: string;
+  entity_type: string;
+  op: string;
+  local_id?: string;
+  payload: Record<string, unknown>;
+  created_at?: string;
+};
+
+export type SyncRunResponse = {
+  session_id: string;
+  status: string;
+  push: {
+    applied?: number;
+    failed?: number;
+    results: Array<{
+      client_mutation_id: string;
+      status: string;
+      server_id?: string;
+      error?: string;
+      local_id?: string;
+      entity_type?: string;
+      record?: Record<string, unknown>;
+    }>;
+  };
+  pull: Record<string, unknown> & { sync_token?: string };
+  sync_token?: string;
+};
+
 type Paginated<T> = { items: T[]; meta: { total: number; page: number; page_size: number } };
 
 class FieldApi {
@@ -272,6 +346,74 @@ class FieldApi {
     if (params.survey_id) q.set("survey_id", params.survey_id);
     if (params.updated_after) q.set("updated_after", params.updated_after);
     return this.request<Paginated<SurveySubmission>>(`/survey-responses?${q}`);
+  }
+
+  registerDevice(body: {
+    device_key: string;
+    name: string;
+    platform: string;
+    app_version?: string;
+    push_token?: string;
+    storage_bytes?: number;
+    pending_uploads?: number;
+    metadata?: Record<string, unknown>;
+  }) {
+    return this.request<Device>("/devices/register", {
+      method: "POST",
+      body: JSON.stringify(body),
+    });
+  }
+
+  heartbeat(
+    deviceId: string,
+    body: {
+      app_version?: string;
+      storage_bytes?: number;
+      pending_uploads?: number;
+      metadata?: Record<string, unknown>;
+    } = {},
+  ) {
+    return this.request<Device>(`/devices/${deviceId}/heartbeat`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    });
+  }
+
+  syncRun(body: {
+    device_id: string;
+    client_version?: string;
+    push?: {
+      device_id?: string;
+      mutations: SyncMutationItem[];
+    };
+    pull?: {
+      since?: string;
+      entities?: string[];
+      page_size?: number;
+    };
+  }) {
+    return this.request<SyncRunResponse>("/sync/run", {
+      method: "POST",
+      body: JSON.stringify(body),
+    });
+  }
+
+  listTasks(params: { page?: number; status?: string; updated_after?: string } = {}) {
+    const q = new URLSearchParams();
+    q.set("page", String(params.page ?? 1));
+    q.set("page_size", "100");
+    if (params.status) q.set("status", params.status);
+    if (params.updated_after) q.set("updated_after", params.updated_after);
+    return this.request<Paginated<Task>>(`/tasks?${q}`);
+  }
+
+  listNotifications(params: { page?: number; unread_only?: boolean; updated_after?: string } = {}) {
+    const q = new URLSearchParams();
+    q.set("page", String(params.page ?? 1));
+    q.set("page_size", "100");
+    if (params.unread_only) q.set("unread_only", "true");
+    if (params.updated_after) q.set("updated_after", params.updated_after);
+    return this.request<Paginated<Notification>>(`/notifications?${q}`);
   }
 }
 

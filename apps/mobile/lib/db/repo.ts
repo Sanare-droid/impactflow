@@ -4,9 +4,14 @@ import type {
   LocalBeneficiary,
   LocalCommunity,
   LocalHousehold,
+  LocalNotification,
   LocalSurvey,
   LocalSurveyResponse,
+  LocalTask,
+  MediaQueueRow,
   MutationRow,
+  SearchIndexRow,
+  SyncLogRow,
   SyncStatus,
 } from "@/lib/db/types";
 
@@ -61,6 +66,13 @@ export async function createLocalBeneficiary(input: {
     [local_id],
   );
   if (!row) throw new Error("Failed to create local beneficiary");
+  await indexSearchEntry({
+    entity_type: "beneficiary",
+    entity_local_id: local_id,
+    title: `${input.first_name} ${input.last_name}`,
+    subtitle: input.phone,
+    keywords: [input.first_name, input.last_name, input.phone].filter(Boolean).join(" "),
+  });
   return row;
 }
 
@@ -83,6 +95,13 @@ export async function upsertServerBeneficiary(remote: {
   );
   // Server-wins only for synced rows; preserve pending local edits
   if (existing && existing.sync_status !== "synced") {
+    await logSyncConflict({
+      entity_type: "beneficiary",
+      local_id: existing.local_id,
+      server_id: remote.id,
+      local_snapshot: JSON.parse(existing.payload_json),
+      server_snapshot: remote as Record<string, unknown>,
+    });
     return;
   }
   const updated_at_local = nowIso();
@@ -580,6 +599,504 @@ export async function getBeneficiary(local_id: string): Promise<LocalBeneficiary
       [local_id],
     )) ?? null
   );
+}
+
+export async function searchBeneficiaries(query: string): Promise<LocalBeneficiary[]> {
+  const db = await getDb();
+  const q = `%${query.trim().toLowerCase()}%`;
+  if (!q || q === "%%") return listLocalBeneficiaries();
+  return db.getAllAsync<LocalBeneficiary>(
+    `SELECT * FROM beneficiaries
+     WHERE LOWER(first_name || ' ' || last_name) LIKE ?
+        OR LOWER(COALESCE(code, '')) LIKE ?
+        OR LOWER(COALESCE(phone, '')) LIKE ?
+     ORDER BY updated_at_local DESC`,
+    [q, q, q],
+  );
+}
+
+export async function updateLocalBeneficiary(
+  local_id: string,
+  input: { first_name?: string; last_name?: string; phone?: string | null },
+): Promise<void> {
+  const db = await getDb();
+  const existing = await getBeneficiary(local_id);
+  if (!existing) throw new Error("Beneficiary not found");
+
+  const payload = {
+    ...JSON.parse(existing.payload_json),
+    ...input,
+  };
+  await db.runAsync(
+    `UPDATE beneficiaries SET first_name = COALESCE(?, first_name),
+      last_name = COALESCE(?, last_name), phone = COALESCE(?, phone),
+      payload_json = ?, sync_status = 'pending', updated_at_local = ?
+     WHERE local_id = ?`,
+    [
+      input.first_name ?? null,
+      input.last_name ?? null,
+      input.phone ?? null,
+      JSON.stringify(payload),
+      nowIso(),
+      local_id,
+    ],
+  );
+  if (existing.server_id) {
+    await enqueueMutation({
+      entity_type: "beneficiary",
+      local_id,
+      op: "update",
+      payload,
+    });
+  }
+  await indexSearchEntry({
+    entity_type: "beneficiary",
+    entity_local_id: local_id,
+    entity_server_id: existing.server_id,
+    title: `${input.first_name ?? existing.first_name} ${input.last_name ?? existing.last_name}`,
+    subtitle: existing.code ?? existing.phone,
+    keywords: [existing.first_name, existing.last_name, existing.code, existing.phone]
+      .filter(Boolean)
+      .join(" "),
+  });
+}
+
+// -------- Tasks (server-wins cache from sync pull) --------
+
+export async function upsertServerTask(remote: {
+  id: string;
+  organization_id?: string;
+  project_id?: string;
+  title: string;
+  description?: string | null;
+  status?: string;
+  priority?: string | null;
+  assignee_id?: string | null;
+  due_date?: string | null;
+  completed_at?: string | null;
+  updated_at?: string;
+}): Promise<void> {
+  const db = await getDb();
+  const existing = await db.getFirstAsync<LocalTask>(
+    "SELECT * FROM tasks WHERE server_id = ?",
+    [remote.id],
+  );
+  const updated_at_local = nowIso();
+  const payload = JSON.stringify(remote);
+  if (existing) {
+    await db.runAsync(
+      `UPDATE tasks SET title = ?, description = ?, status = ?, priority = ?,
+        assignee_id = ?, due_date = ?, completed_at = ?, payload_json = ?,
+        sync_status = 'synced', last_error = NULL, updated_at_local = ?,
+        updated_at_server = ?, organization_id = COALESCE(organization_id, ?),
+        project_id = COALESCE(?, project_id)
+       WHERE local_id = ?`,
+      [
+        remote.title,
+        remote.description ?? null,
+        remote.status ?? "open",
+        remote.priority ?? null,
+        remote.assignee_id ?? null,
+        remote.due_date ?? null,
+        remote.completed_at ?? null,
+        payload,
+        updated_at_local,
+        remote.updated_at ?? null,
+        remote.organization_id ?? null,
+        remote.project_id ?? null,
+        existing.local_id,
+      ],
+    );
+    await indexSearchEntry({
+      entity_type: "task",
+      entity_local_id: existing.local_id,
+      entity_server_id: remote.id,
+      title: remote.title,
+      subtitle: remote.status ?? undefined,
+      keywords: [remote.title, remote.description, remote.status].filter(Boolean).join(" "),
+    });
+  } else {
+    const local_id = newLocalId();
+    await db.runAsync(
+      `INSERT INTO tasks (
+        local_id, server_id, organization_id, project_id, title, description,
+        status, priority, assignee_id, due_date, completed_at, payload_json,
+        sync_status, last_error, updated_at_local, updated_at_server
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'synced', NULL, ?, ?)`,
+      [
+        local_id,
+        remote.id,
+        remote.organization_id ?? null,
+        remote.project_id ?? null,
+        remote.title,
+        remote.description ?? null,
+        remote.status ?? "open",
+        remote.priority ?? null,
+        remote.assignee_id ?? null,
+        remote.due_date ?? null,
+        remote.completed_at ?? null,
+        payload,
+        updated_at_local,
+        remote.updated_at ?? null,
+      ],
+    );
+    await indexSearchEntry({
+      entity_type: "task",
+      entity_local_id: local_id,
+      entity_server_id: remote.id,
+      title: remote.title,
+      subtitle: remote.status ?? undefined,
+      keywords: [remote.title, remote.description, remote.status].filter(Boolean).join(" "),
+    });
+  }
+}
+
+export async function listLocalTasks(status?: string): Promise<LocalTask[]> {
+  const db = await getDb();
+  if (status) {
+    return db.getAllAsync<LocalTask>(
+      "SELECT * FROM tasks WHERE status = ? ORDER BY due_date ASC, updated_at_local DESC",
+      [status],
+    );
+  }
+  return db.getAllAsync<LocalTask>(
+    "SELECT * FROM tasks ORDER BY CASE status WHEN 'open' THEN 0 WHEN 'in_progress' THEN 1 ELSE 2 END, due_date ASC",
+  );
+}
+
+export async function getLocalTask(local_id: string): Promise<LocalTask | null> {
+  const db = await getDb();
+  return (await db.getFirstAsync<LocalTask>("SELECT * FROM tasks WHERE local_id = ?", [local_id])) ?? null;
+}
+
+export async function countOpenTasks(): Promise<number> {
+  const db = await getDb();
+  const row = await db.getFirstAsync<{ c: number }>(
+    "SELECT COUNT(*) as c FROM tasks WHERE status IN ('open', 'in_progress')",
+  );
+  return row?.c ?? 0;
+}
+
+// -------- Notifications (cache from sync pull only) --------
+
+export async function upsertServerNotification(remote: {
+  id: string;
+  organization_id?: string;
+  user_id?: string;
+  event_type?: string;
+  title: string;
+  body?: string | null;
+  link?: string | null;
+  severity?: string | null;
+  status?: string | null;
+  read_at?: string | null;
+  created_at?: string;
+  updated_at?: string;
+}): Promise<void> {
+  const db = await getDb();
+  const existing = await db.getFirstAsync<LocalNotification>(
+    "SELECT * FROM notifications WHERE server_id = ?",
+    [remote.id],
+  );
+  const updated_at_local = nowIso();
+  const payload = JSON.stringify(remote);
+  if (existing) {
+    await db.runAsync(
+      `UPDATE notifications SET title = ?, body = ?, link = ?, severity = ?,
+        status = ?, read_at = ?, event_type = ?, payload_json = ?,
+        sync_status = 'synced', updated_at_local = ?, updated_at_server = ?
+       WHERE local_id = ?`,
+      [
+        remote.title,
+        remote.body ?? null,
+        remote.link ?? null,
+        remote.severity ?? null,
+        remote.status ?? null,
+        remote.read_at ?? null,
+        remote.event_type ?? null,
+        payload,
+        updated_at_local,
+        remote.updated_at ?? remote.created_at ?? null,
+        existing.local_id,
+      ],
+    );
+  } else {
+    await db.runAsync(
+      `INSERT INTO notifications (
+        local_id, server_id, organization_id, user_id, event_type, title, body,
+        link, severity, status, read_at, payload_json, sync_status,
+        updated_at_local, updated_at_server
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'synced', ?, ?)`,
+      [
+        newLocalId(),
+        remote.id,
+        remote.organization_id ?? null,
+        remote.user_id ?? null,
+        remote.event_type ?? null,
+        remote.title,
+        remote.body ?? null,
+        remote.link ?? null,
+        remote.severity ?? null,
+        remote.status ?? null,
+        remote.read_at ?? null,
+        payload,
+        updated_at_local,
+        remote.updated_at ?? remote.created_at ?? null,
+      ],
+    );
+  }
+}
+
+export async function listLocalNotifications(unreadOnly = false): Promise<LocalNotification[]> {
+  const db = await getDb();
+  if (unreadOnly) {
+    return db.getAllAsync<LocalNotification>(
+      "SELECT * FROM notifications WHERE read_at IS NULL ORDER BY updated_at_local DESC",
+    );
+  }
+  return db.getAllAsync<LocalNotification>(
+    "SELECT * FROM notifications ORDER BY updated_at_local DESC LIMIT 100",
+  );
+}
+
+export async function countUnreadNotifications(): Promise<number> {
+  const db = await getDb();
+  const row = await db.getFirstAsync<{ c: number }>(
+    "SELECT COUNT(*) as c FROM notifications WHERE read_at IS NULL",
+  );
+  return row?.c ?? 0;
+}
+
+export async function markNotificationRead(local_id: string): Promise<void> {
+  const db = await getDb();
+  await db.runAsync(
+    "UPDATE notifications SET read_at = ?, updated_at_local = ? WHERE local_id = ?",
+    [nowIso(), nowIso(), local_id],
+  );
+}
+
+// -------- Media queue --------
+
+export async function enqueueMediaUpload(input: {
+  entity_type: string;
+  entity_local_id?: string;
+  entity_server_id?: string;
+  file_uri: string;
+  file_name: string;
+  mime_type?: string;
+  file_size?: number;
+}): Promise<MediaQueueRow> {
+  const db = await getDb();
+  const local_id = newLocalId();
+  const client_mutation_id = newLocalId();
+  const now = nowIso();
+  await db.runAsync(
+    `INSERT INTO media_queue (
+      local_id, server_id, client_mutation_id, entity_type, entity_local_id,
+      entity_server_id, file_uri, file_name, mime_type, file_size, status,
+      last_error, payload_json, created_at, updated_at
+    ) VALUES (?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', NULL, '{}', ?, ?)`,
+    [
+      local_id,
+      client_mutation_id,
+      input.entity_type,
+      input.entity_local_id ?? null,
+      input.entity_server_id ?? null,
+      input.file_uri,
+      input.file_name,
+      input.mime_type ?? null,
+      input.file_size ?? 0,
+      now,
+      now,
+    ],
+  );
+  const row = await db.getFirstAsync<MediaQueueRow>(
+    "SELECT * FROM media_queue WHERE local_id = ?",
+    [local_id],
+  );
+  if (!row) throw new Error("Failed to enqueue media");
+  return row;
+}
+
+export async function listPendingMedia(): Promise<MediaQueueRow[]> {
+  const db = await getDb();
+  return db.getAllAsync<MediaQueueRow>(
+    "SELECT * FROM media_queue WHERE status IN ('pending', 'failed') ORDER BY created_at ASC",
+  );
+}
+
+export async function markMediaSynced(local_id: string, server_id: string): Promise<void> {
+  const db = await getDb();
+  await db.runAsync(
+    "UPDATE media_queue SET status = 'synced', server_id = ?, updated_at = ? WHERE local_id = ?",
+    [server_id, nowIso(), local_id],
+  );
+}
+
+export async function markMediaFailed(local_id: string, error: string): Promise<void> {
+  const db = await getDb();
+  await db.runAsync(
+    "UPDATE media_queue SET status = 'failed', last_error = ?, updated_at = ? WHERE local_id = ?",
+    [error.slice(0, 500), nowIso(), local_id],
+  );
+}
+
+// -------- Sync logs & conflicts --------
+
+export async function logSyncSession(input: {
+  session_id?: string | null;
+  status: string;
+  pushed_count: number;
+  pulled_count: number;
+  failed_count: number;
+  conflict_count?: number;
+  error_message?: string | null;
+  started_at: string;
+  completed_at?: string | null;
+  payload?: Record<string, unknown>;
+}): Promise<void> {
+  const db = await getDb();
+  await db.runAsync(
+    `INSERT INTO sync_logs (
+      id, session_id, status, pushed_count, pulled_count, failed_count,
+      conflict_count, error_message, started_at, completed_at, payload_json
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      newLocalId(),
+      input.session_id ?? null,
+      input.status,
+      input.pushed_count,
+      input.pulled_count,
+      input.failed_count,
+      input.conflict_count ?? 0,
+      input.error_message ?? null,
+      input.started_at,
+      input.completed_at ?? null,
+      JSON.stringify(input.payload ?? {}),
+    ],
+  );
+}
+
+export async function logSyncConflict(input: {
+  entity_type: string;
+  local_id: string;
+  server_id?: string | null;
+  local_snapshot: Record<string, unknown>;
+  server_snapshot: Record<string, unknown>;
+}): Promise<void> {
+  await logSyncSession({
+    status: "conflict",
+    pushed_count: 0,
+    pulled_count: 0,
+    failed_count: 0,
+    conflict_count: 1,
+    started_at: nowIso(),
+    completed_at: nowIso(),
+    payload: input,
+  });
+}
+
+export async function listSyncLogs(limit = 20): Promise<SyncLogRow[]> {
+  const db = await getDb();
+  return db.getAllAsync<SyncLogRow>(
+    "SELECT * FROM sync_logs ORDER BY started_at DESC LIMIT ?",
+    [limit],
+  );
+}
+
+// -------- Search index --------
+
+export async function indexSearchEntry(input: {
+  entity_type: string;
+  entity_local_id: string;
+  entity_server_id?: string | null;
+  title: string;
+  subtitle?: string | null;
+  keywords?: string;
+}): Promise<void> {
+  const db = await getDb();
+  const id = `${input.entity_type}:${input.entity_local_id}`;
+  const updated_at = nowIso();
+  await db.runAsync(
+    `INSERT INTO search_index (id, entity_type, entity_local_id, entity_server_id, title, subtitle, keywords, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT(id) DO UPDATE SET
+       title = excluded.title, subtitle = excluded.subtitle,
+       keywords = excluded.keywords, updated_at = excluded.updated_at,
+       entity_server_id = COALESCE(excluded.entity_server_id, search_index.entity_server_id)`,
+    [
+      id,
+      input.entity_type,
+      input.entity_local_id,
+      input.entity_server_id ?? null,
+      input.title,
+      input.subtitle ?? null,
+      input.keywords ?? input.title,
+      updated_at,
+    ],
+  );
+}
+
+export async function searchAll(query: string, limit = 30): Promise<SearchIndexRow[]> {
+  const db = await getDb();
+  const q = `%${query.trim().toLowerCase()}%`;
+  if (!query.trim()) return [];
+  return db.getAllAsync<SearchIndexRow>(
+    `SELECT * FROM search_index
+     WHERE LOWER(title || ' ' || COALESCE(subtitle, '') || ' ' || keywords) LIKE ?
+     ORDER BY updated_at DESC LIMIT ?`,
+    [q, limit],
+  );
+}
+
+// -------- Settings & profile --------
+
+export async function getSetting(key: string): Promise<string | null> {
+  const db = await getDb();
+  const row = await db.getFirstAsync<{ value: string }>(
+    "SELECT value FROM settings WHERE key = ?",
+    [key],
+  );
+  return row?.value ?? null;
+}
+
+export async function setSetting(key: string, value: string): Promise<void> {
+  const db = await getDb();
+  await db.runAsync(
+    "INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+    [key, value],
+  );
+}
+
+export async function getProfileField(key: string): Promise<string | null> {
+  const db = await getDb();
+  const row = await db.getFirstAsync<{ value: string }>(
+    "SELECT value FROM user_profile WHERE key = ?",
+    [key],
+  );
+  return row?.value ?? null;
+}
+
+export async function setProfileField(key: string, value: string): Promise<void> {
+  const db = await getDb();
+  await db.runAsync(
+    "INSERT INTO user_profile (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+    [key, value],
+  );
+}
+
+export async function countBeneficiaries(): Promise<number> {
+  const db = await getDb();
+  const row = await db.getFirstAsync<{ c: number }>("SELECT COUNT(*) as c FROM beneficiaries");
+  return row?.c ?? 0;
+}
+
+export async function countLocalSurveys(): Promise<number> {
+  const db = await getDb();
+  const row = await db.getFirstAsync<{ c: number }>(
+    "SELECT COUNT(*) as c FROM surveys WHERE status = 'published'",
+  );
+  return row?.c ?? 0;
 }
 
 export type { SyncStatus };

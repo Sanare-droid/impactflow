@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import re
 import secrets
-from datetime import date
+from datetime import date, datetime
 from typing import Optional
 from uuid import UUID
 
@@ -675,6 +675,7 @@ async def list_tasks(
     work_plan_id: Optional[UUID] = None,
     status: Optional[str] = None,
     assignee_id: Optional[UUID] = None,
+    updated_after: Optional[datetime] = None,
 ) -> tuple[list[Task], int]:
     filters = [Task.organization_id == organization_id]
     if project_id:
@@ -687,6 +688,8 @@ async def list_tasks(
         filters.append(Task.status == status)
     if assignee_id:
         filters.append(Task.assignee_id == assignee_id)
+    if updated_after:
+        filters.append(Task.updated_at >= updated_after)
 
     total = await db.scalar(select(func.count()).select_from(Task).where(*filters)) or 0
     result = await db.execute(

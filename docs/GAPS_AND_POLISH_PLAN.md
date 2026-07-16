@@ -175,8 +175,8 @@ flowchart LR
 
 ---
 
-## Inventory notes (as of Epic 3 / API 0.15)
+## Inventory notes (as of Epic 4 / API 0.16)
 
-**Exists:** Full A–E stack, Epic 1 forms engine, Epic 2 AI Copilot (`docs/EPIC2_AI_COPILOT.md`), and Epic 3 Workflow Engine (`docs/EPIC3_WORKFLOWS.md`): event + schedule triggers, conditions, actions, approvals, templates, builder UI at `/app/workflows`, execution queue hooked into `emit_event` + `run_job_tick`, AI workflow draft assist.
+**Exists:** Full A–E stack, Epics 1–3, plus Epic 4 Field Operations (`docs/EPIC4_FIELD_OPS.md`): batch sync API, device management, mobile design system revamp (v1.0.0), field ops web dashboard at `/app/field-operations`.
 
-**Deferred:** Public shared-conversation view, freeform graph DnD, SMS/Teams/WhatsApp, full cron engine, Kobo/ODK import, native PDF binary, pgvector, OAuth integrations.
+**Deferred:** Push notifications, encrypted SQLite, offline maps, binary media object storage, biometric unlock.

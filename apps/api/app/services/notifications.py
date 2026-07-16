@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Optional
 from uuid import UUID
 
@@ -103,6 +104,7 @@ async def list_notifications(
     page: int,
     page_size: int,
     status: Optional[str] = None,
+    updated_after: Optional[datetime] = None,
 ) -> tuple[list[Notification], int]:
     filters = [
         Notification.organization_id == organization_id,
@@ -111,6 +113,8 @@ async def list_notifications(
     ]
     if status:
         filters.append(Notification.status == status)
+    if updated_after:
+        filters.append(Notification.updated_at >= updated_after)
     total = await db.scalar(select(func.count()).select_from(Notification).where(*filters))
     rows = await db.scalars(
         select(Notification)

@@ -1155,6 +1155,66 @@ export type WorkflowMetrics = {
   pending_approvals: number;
 };
 
+export type FieldDevice = {
+  id: string;
+  organization_id: string;
+  user_id: string;
+  device_key: string;
+  name: string;
+  platform: string;
+  app_version?: string | null;
+  status: string;
+  last_seen_at?: string | null;
+  last_sync_at?: string | null;
+  storage_bytes: number;
+  pending_uploads: number;
+  metadata: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+};
+
+export type SyncSession = {
+  id: string;
+  organization_id: string;
+  device_id: string;
+  user_id: string;
+  status: string;
+  started_at: string;
+  completed_at?: string | null;
+  pushed_count: number;
+  pulled_count: number;
+  failed_count: number;
+  error_message?: string | null;
+  sync_token?: string | null;
+  client_version?: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type MediaUploadRecord = {
+  id: string;
+  organization_id: string;
+  device_id?: string | null;
+  client_mutation_id: string;
+  entity_type: string;
+  entity_id?: string | null;
+  file_name: string;
+  mime_type?: string | null;
+  file_size: number;
+  status: string;
+  remote_url?: string | null;
+  error_message?: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type FieldOpsMetrics = {
+  active_devices: number;
+  failed_mutations: number;
+  sync_sessions: number;
+  conflicts: number;
+};
+
 export type WorkflowDefinitionExport = {
   name?: string;
   code?: string;
@@ -2469,6 +2529,39 @@ class ApiClient {
       method: "POST",
       body: JSON.stringify({ prompt, save }),
     });
+  }
+
+  // Field operations (Epic 4)
+  fieldOpsMetrics() {
+    return this.request<FieldOpsMetrics>("/field-ops/metrics");
+  }
+
+  listFieldDevices(params: { page?: number; status?: string } = {}) {
+    const q = new URLSearchParams({ page_size: "50" });
+    if (params.page) q.set("page", String(params.page));
+    if (params.status) q.set("status", params.status);
+    return this.request<Paginated<FieldDevice>>(`/devices?${q}`);
+  }
+
+  updateFieldDeviceStatus(id: string, status: "active" | "deactivated" | "revoked") {
+    return this.request<FieldDevice>(`/devices/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ status }),
+    });
+  }
+
+  listSyncSessions(params: { page?: number; device_id?: string } = {}) {
+    const q = new URLSearchParams({ page_size: "50" });
+    if (params.page) q.set("page", String(params.page));
+    if (params.device_id) q.set("device_id", params.device_id);
+    return this.request<Paginated<SyncSession>>(`/sync/sessions?${q}`);
+  }
+
+  listMediaUploads(params: { page?: number; status?: string } = {}) {
+    const q = new URLSearchParams({ page_size: "50" });
+    if (params.page) q.set("page", String(params.page));
+    if (params.status) q.set("status", params.status);
+    return this.request<Paginated<MediaUploadRecord>>(`/media/uploads?${q}`);
   }
 }
 

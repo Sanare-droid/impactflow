@@ -27,6 +27,7 @@ import {
   UsersRound,
   Home,
   MapPinned,
+  Smartphone,
   FileText,
   BarChart3,
   Map,
@@ -93,6 +94,7 @@ const navGroups: NavGroup[] = [
   {
     label: "Field",
     items: [
+      { href: "/app/field-operations", label: "Field Operations", icon: Smartphone },
       { href: "/app/communities", label: "Communities", icon: MapPinned },
       { href: "/app/households", label: "Households", icon: Home },
       { href: "/app/beneficiaries", label: "Beneficiaries", icon: UsersRound },

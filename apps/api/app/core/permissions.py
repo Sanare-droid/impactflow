@@ -93,6 +93,11 @@ PERMISSION_CATALOG: list[dict[str, str]] = [
     {"code": "workflows:read", "module": "workflows", "action": "read", "description": "View workflows, runs, and approvals"},
     {"code": "workflows:manage", "module": "workflows", "action": "manage", "description": "Create and manage workflows"},
     {"code": "workflows:approve", "module": "workflows", "action": "approve", "description": "Decide workflow approvals"},
+    {"code": "sync:push", "module": "sync", "action": "push", "description": "Push offline changes from field devices"},
+    {"code": "sync:pull", "module": "sync", "action": "pull", "description": "Pull delta updates to field devices"},
+    {"code": "devices:register", "module": "devices", "action": "register", "description": "Register field devices"},
+    {"code": "devices:read", "module": "devices", "action": "read", "description": "View registered field devices"},
+    {"code": "devices:manage", "module": "devices", "action": "manage", "description": "Manage and revoke field devices"},
 ]
 
 # Default system roles and their permission codes
@@ -255,6 +260,9 @@ SYSTEM_ROLES: dict[str, dict] = {
             "evidence:manage",
             "maps:read",
             "workflows:read",
+            "sync:push",
+            "sync:pull",
+            "devices:register",
         ],
     },
     "viewer": {

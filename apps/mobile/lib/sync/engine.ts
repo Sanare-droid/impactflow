@@ -1,81 +1,94 @@
 import { api } from "@/lib/api";
+import {
+  getAppVersion,
+  getDeviceId,
+  getDeviceName,
+  getOrCreateDeviceKey,
+  getPlatform,
+  setDeviceId,
+} from "@/lib/device";
 import { getMeta, setMeta } from "@/lib/db";
 import * as repo from "@/lib/db/repo";
+import { nowIso } from "@/lib/id";
 
 export type SyncResult = {
   pushed: number;
   failed: number;
   pulled: number;
+  conflicts: number;
   lastSyncAt: string | null;
+  sessionId?: string;
 };
 
 let syncing = false;
 
-async function pullAllPages<T>(
-  fetchPage: (page: number, updated_after?: string) => Promise<{
-    items: T[];
-    meta: { total: number; page: number; page_size: number };
-  }>,
-  updated_after?: string | null,
-): Promise<T[]> {
-  const items: T[] = [];
-  let page = 1;
-  for (;;) {
-    const res = await fetchPage(page, updated_after || undefined);
-    items.push(...res.items);
-    const loaded = page * res.meta.page_size;
-    if (loaded >= res.meta.total || res.items.length === 0) break;
-    page += 1;
-    if (page > 50) break;
-  }
-  return items;
+async function ensureDeviceRegistered(): Promise<string> {
+  const existing = await getDeviceId();
+  if (existing) return existing;
+
+  const device = await api.registerDevice({
+    device_key: await getOrCreateDeviceKey(),
+    name: getDeviceName(),
+    platform: getPlatform(),
+    app_version: getAppVersion(),
+  });
+  await setDeviceId(device.id);
+  return device.id;
 }
 
-async function pushQueue(): Promise<{ pushed: number; failed: number }> {
-  const mutations = await repo.listPendingMutations();
+function buildPushMutations(
+  mutations: Awaited<ReturnType<typeof repo.listPendingMutations>>,
+) {
+  return mutations.map((mut) => ({
+    client_mutation_id: mut.id,
+    entity_type: mut.entity_type,
+    op: mut.op,
+    local_id: mut.local_id,
+    payload: JSON.parse(mut.payload_json) as Record<string, unknown>,
+    created_at: mut.created_at,
+  }));
+}
+
+async function applyPushResults(
+  mutations: Awaited<ReturnType<typeof repo.listPendingMutations>>,
+  results: Array<{
+    client_mutation_id: string;
+    status: string;
+    server_id?: string;
+    error?: string;
+    record?: Record<string, unknown>;
+  }>,
+): Promise<{ pushed: number; failed: number }> {
+  const byId = new Map(mutations.map((m) => [m.id, m]));
   let pushed = 0;
   let failed = 0;
 
-  for (const mut of mutations) {
-    try {
-      const payload = JSON.parse(mut.payload_json) as Record<string, unknown>;
-      if (mut.entity_type === "beneficiary" && mut.op === "create") {
-        const created = await api.createBeneficiary(payload);
-        await repo.markBeneficiarySynced(mut.local_id, {
-          id: created.id,
-          code: created.code,
-          updated_at: created.updated_at,
-        });
-      } else if (mut.entity_type === "beneficiary" && mut.op === "update") {
-        const local = await repo.getBeneficiary(mut.local_id);
-        if (!local?.server_id) throw new Error("Missing server id for update");
-        const updated = await api.updateBeneficiary(local.server_id, payload);
-        await repo.markBeneficiarySynced(mut.local_id, {
-          id: updated.id,
-          code: updated.code,
-          updated_at: updated.updated_at,
-        });
-      } else if (mut.entity_type === "community" && mut.op === "create") {
-        await api.createCommunity(payload);
-      } else if (mut.entity_type === "household" && mut.op === "create") {
-        await api.createHousehold(payload);
-      } else if (mut.entity_type === "survey_response" && mut.op === "create") {
-        const surveyId = payload.survey_id as string | undefined;
-        if (!surveyId) throw new Error("Survey has not synced yet — try again once online");
-        const { survey_id: _drop, ...body } = payload;
-        const created = await api.submitSurveyResponse(surveyId, body);
-        await repo.markSurveyResponseSynced(mut.local_id, {
-          id: created.id,
-          survey_id: created.survey_id,
-          updated_at: created.updated_at,
-        });
-      } else {
-        throw new Error(`Unsupported mutation ${mut.entity_type}:${mut.op}`);
-      }
-      await repo.markMutationDone(mut.id);
+  for (const result of results) {
+    const mut = byId.get(result.client_mutation_id);
+    if (!mut && result.status === "duplicate") {
       pushed += 1;
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "Sync failed";
+      continue;
+    }
+    if (!mut) continue;
+
+    if (result.status === "applied" || result.status === "duplicate") {
+      await repo.markMutationDone(mut.id);
+      if (mut.entity_type === "beneficiary" && result.server_id) {
+        await repo.markBeneficiarySynced(mut.local_id, {
+          id: result.server_id,
+          code: (result.record?.code as string) ?? undefined,
+          updated_at: (result.record?.updated_at as string) ?? undefined,
+        });
+      } else if (mut.entity_type === "survey_response" && result.server_id) {
+        await repo.markSurveyResponseSynced(mut.local_id, {
+          id: result.server_id,
+          survey_id: (result.record?.survey_id as string) ?? undefined,
+          updated_at: (result.record?.updated_at as string) ?? undefined,
+        });
+      }
+      pushed += 1;
+    } else {
+      const message = result.error ?? "Sync failed";
       await repo.markMutationFailed(mut.id, message);
       if (mut.entity_type === "beneficiary") {
         await repo.markBeneficiaryFailed(mut.local_id, message);
@@ -88,77 +101,158 @@ async function pushQueue(): Promise<{ pushed: number; failed: number }> {
   return { pushed, failed };
 }
 
-async function pullDeltas(): Promise<number> {
-  const last = await getMeta("last_sync_at");
+async function applyPullResults(pull: Record<string, unknown>): Promise<number> {
   let pulled = 0;
 
-  const communities = await pullAllPages(
-    (page, updated_after) => api.listCommunities({ page, updated_after }),
-    last,
-  );
-  for (const c of communities) {
-    await repo.upsertServerCommunity(c);
+  for (const c of (pull.communities as Array<Record<string, unknown>>) ?? []) {
+    await repo.upsertServerCommunity(c as Parameters<typeof repo.upsertServerCommunity>[0]);
     pulled += 1;
   }
 
-  const households = await pullAllPages(
-    (page, updated_after) => api.listHouseholds({ page, updated_after }),
-    last,
-  );
-  for (const h of households) {
-    await repo.upsertServerHousehold(h);
+  for (const h of (pull.households as Array<Record<string, unknown>>) ?? []) {
+    await repo.upsertServerHousehold(h as Parameters<typeof repo.upsertServerHousehold>[0]);
     pulled += 1;
   }
 
-  const beneficiaries = await pullAllPages(
-    (page, updated_after) => api.listBeneficiaries({ page, updated_after }),
-    last,
-  );
-  for (const b of beneficiaries) {
-    await repo.upsertServerBeneficiary(b);
+  for (const b of (pull.beneficiaries as Array<Record<string, unknown>>) ?? []) {
+    await repo.upsertServerBeneficiary(b as Parameters<typeof repo.upsertServerBeneficiary>[0]);
     pulled += 1;
-  }
-
-  // Surveys: fetch published forms + their current schema so capture works offline.
-  const surveys = await pullAllPages(
-    (page, updated_after) => api.listSurveys({ page, updated_after, status: "published" }),
-    last,
-  );
-  for (const s of surveys) {
-    try {
-      const detail = await api.getSurvey(s.id);
-      await repo.upsertServerSurvey({ ...detail.survey, version: detail.version });
-    } catch {
-      // Schema fetch failed (e.g. permission change); keep prior cached copy.
-      await repo.upsertServerSurvey({ ...s, version: null });
+    const row = (await repo.listLocalBeneficiaries()).find((x) => x.server_id === b.id);
+    if (row) {
+      await repo.indexSearchEntry({
+        entity_type: "beneficiary",
+        entity_local_id: row.local_id,
+        entity_server_id: row.server_id,
+        title: `${row.first_name} ${row.last_name}`,
+        subtitle: row.code ?? row.phone,
+        keywords: [row.first_name, row.last_name, row.code, row.phone].filter(Boolean).join(" "),
+      });
     }
+  }
+
+  for (const s of (pull.surveys as Array<Record<string, unknown>>) ?? []) {
+    const version = s.version as Record<string, unknown> | undefined;
+    await repo.upsertServerSurvey({
+      ...(s as Parameters<typeof repo.upsertServerSurvey>[0]),
+      version: version
+        ? {
+            id: String(version.id),
+            survey_id: String(version.survey_id),
+            version: Number(version.version),
+            title: String(version.title ?? ""),
+            schema: (version.schema as Record<string, unknown>) ?? {},
+            published_at: (version.published_at as string) ?? null,
+          }
+        : null,
+    });
+    pulled += 1;
+  }
+
+  for (const t of (pull.tasks as Array<Record<string, unknown>>) ?? []) {
+    await repo.upsertServerTask(t as Parameters<typeof repo.upsertServerTask>[0]);
+    pulled += 1;
+  }
+
+  for (const n of (pull.notifications as Array<Record<string, unknown>>) ?? []) {
+    await repo.upsertServerNotification(n as Parameters<typeof repo.upsertServerNotification>[0]);
     pulled += 1;
   }
 
   return pulled;
 }
 
-/** Push local queue then pull server changes (server-wins for synced rows). */
+/** Batch push + pull via POST /sync/run with device registration and conflict logging. */
 export async function runSync(): Promise<SyncResult> {
   if (syncing) {
     return {
       pushed: 0,
       failed: 0,
       pulled: 0,
+      conflicts: 0,
       lastSyncAt: await getMeta("last_sync_at"),
     };
   }
   syncing = true;
+  const startedAt = nowIso();
   try {
-    // Refresh auth before batch when possible
     if (api.refreshToken) {
       await api.refresh();
     }
-    const { pushed, failed } = await pushQueue();
-    const pulled = await pullDeltas();
-    const lastSyncAt = new Date().toISOString();
+
+    const deviceId = await ensureDeviceRegistered();
+    const last = await getMeta("last_sync_at");
+    const pendingMutations = await repo.listPendingMutations();
+    const pendingMedia = await repo.listPendingMedia();
+
+    const response = await api.syncRun({
+      device_id: deviceId,
+      client_version: getAppVersion(),
+      push: {
+        device_id: deviceId,
+        mutations: buildPushMutations(pendingMutations),
+      },
+      pull: {
+        since: last ?? undefined,
+        entities: [
+          "communities",
+          "households",
+          "beneficiaries",
+          "surveys",
+          "tasks",
+          "notifications",
+        ],
+        page_size: 100,
+      },
+    });
+
+    const pushResults = response.push?.results ?? [];
+    const { pushed, failed } = await applyPushResults(pendingMutations, pushResults);
+    const pulled = await applyPullResults(response.pull ?? {});
+
+    const lastSyncAt = response.pull?.sync_token ?? new Date().toISOString();
     await setMeta("last_sync_at", lastSyncAt);
-    return { pushed, failed, pulled, lastSyncAt };
+
+    await api.heartbeat(deviceId, {
+      app_version: getAppVersion(),
+      pending_uploads: pendingMedia.length + (await repo.queueCounts()).pending,
+    });
+
+    const conflictLogs = (await repo.listSyncLogs(50)).filter(
+      (l) => l.status === "conflict" && l.started_at >= startedAt,
+    ).length;
+
+    await repo.logSyncSession({
+      session_id: response.session_id,
+      status: response.status,
+      pushed_count: pushed,
+      pulled_count: pulled,
+      failed_count: failed,
+      conflict_count: conflictLogs,
+      started_at: startedAt,
+      completed_at: nowIso(),
+      payload: { device_id: deviceId },
+    });
+
+    return {
+      pushed,
+      failed,
+      pulled,
+      conflicts: conflictLogs,
+      lastSyncAt,
+      sessionId: response.session_id,
+    };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Sync failed";
+    await repo.logSyncSession({
+      status: "failed",
+      pushed_count: 0,
+      pulled_count: 0,
+      failed_count: 1,
+      error_message: message,
+      started_at: startedAt,
+      completed_at: nowIso(),
+    });
+    throw err;
   } finally {
     syncing = false;
   }

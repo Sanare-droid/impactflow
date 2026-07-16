@@ -2,7 +2,7 @@
   "expo": {
     "name": "ImpactFlow Field",
     "slug": "impactflow-field",
-    "version": "0.7.0",
+    "version": "1.0.0",
     "orientation": "portrait",
     "scheme": "impactflow",
     "userInterfaceStyle": "automatic",
@@ -17,7 +17,24 @@
         "backgroundColor": "#0F766E"
       }
     },
-    "plugins": ["expo-router", "expo-secure-store", "expo-sqlite"],
+    "plugins": [
+      "expo-router",
+      "expo-secure-store",
+      "expo-sqlite",
+      "expo-font",
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "ImpactFlow Field uses your location to geotag field registrations."
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "ImpactFlow Field accesses photos to attach evidence to field records."
+        }
+      ]
+    ],
     "experiments": {
       "typedRoutes": true
     }

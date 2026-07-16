@@ -1,4 +1,6 @@
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
+import { Cloud, CloudOff, RefreshCw, AlertTriangle } from "lucide-react-native";
+import { useTheme } from "@/theme";
 import { useSync } from "@/lib/sync/SyncContext";
 
 function formatWhen(iso: string | null): string {
@@ -10,50 +12,70 @@ function formatWhen(iso: string | null): string {
   }
 }
 
-export function SyncBanner() {
-  const {
-    online,
-    syncing,
-    pending,
-    failed,
-    lastSyncAt,
-    error,
-    syncNow,
-    retryFailed,
-  } = useSync();
+type Props = {
+  compact?: boolean;
+};
+
+export function SyncBanner({ compact = false }: Props) {
+  const { colors, typography, spacing, radius } = useTheme();
+  const { online, syncing, pending, failed, lastSyncAt, error, syncNow, retryFailed } = useSync();
+
+  const bg = failed > 0 ? colors.errorMuted : online ? colors.primaryMuted : colors.warningMuted;
+  const accent = failed > 0 ? colors.error : online ? colors.primaryDark : colors.warning;
 
   return (
     <View
       style={[
         styles.banner,
-        online ? styles.online : styles.offline,
-        failed > 0 && styles.warn,
+        {
+          backgroundColor: bg,
+          borderRadius: radius.md,
+          padding: compact ? spacing.sm : spacing.md,
+          marginBottom: spacing.sm,
+        },
       ]}
     >
+      <View style={styles.iconWrap}>
+        {failed > 0 ? (
+          <AlertTriangle size={18} color={accent} />
+        ) : online ? (
+          <Cloud size={18} color={accent} />
+        ) : (
+          <CloudOff size={18} color={accent} />
+        )}
+      </View>
       <View style={styles.copy}>
-        <Text style={styles.title}>
-          {online ? "Online" : "Offline"} ·{" "}
-          {pending > 0 ? `${pending} pending` : "queue clear"}
+        <Text style={[typography.bodyMedium, { color: accent, fontSize: compact ? 13 : 14 }]}>
+          {online ? "Online" : "Offline"}
+          {pending > 0 ? ` · ${pending} pending` : " · queue clear"}
           {failed > 0 ? ` · ${failed} failed` : ""}
         </Text>
-        <Text style={styles.meta}>Last sync: {formatWhen(lastSyncAt)}</Text>
-        {error ? <Text style={styles.error}>{error}</Text> : null}
+        {!compact && (
+          <Text style={[typography.caption, { color: colors.textSecondary, marginTop: 2 }]}>
+            Last sync: {formatWhen(lastSyncAt)}
+          </Text>
+        )}
+        {error ? (
+          <Text style={[typography.caption, { color: colors.error, marginTop: 2 }]}>{error}</Text>
+        ) : null}
       </View>
       <View style={styles.actions}>
         {failed > 0 ? (
-          <Pressable style={styles.btn} onPress={() => void retryFailed()} disabled={syncing}>
-            <Text style={styles.btnText}>Retry</Text>
+          <Pressable onPress={() => void retryFailed()} disabled={syncing}>
+            <Text style={[typography.caption, { color: accent, fontFamily: typography.bodyMedium.fontFamily }]}>
+              Retry
+            </Text>
           </Pressable>
         ) : null}
         <Pressable
-          style={[styles.btn, !online && styles.btnDisabled]}
           onPress={() => void syncNow()}
           disabled={syncing || !online}
+          style={{ opacity: syncing || !online ? 0.5 : 1 }}
         >
           {syncing ? (
-            <ActivityIndicator color="#fff" size="small" />
+            <ActivityIndicator color={accent} size="small" />
           ) : (
-            <Text style={styles.btnText}>Sync</Text>
+            <RefreshCw size={16} color={accent} />
           )}
         </Pressable>
       </View>
@@ -62,32 +84,8 @@ export function SyncBanner() {
 }
 
 const styles = StyleSheet.create({
-  banner: {
-    marginHorizontal: 20,
-    marginTop: 8,
-    marginBottom: 4,
-    borderRadius: 12,
-    padding: 12,
-    flexDirection: "row",
-    gap: 10,
-    alignItems: "center",
-  },
-  online: { backgroundColor: "#CCFBF1" },
-  offline: { backgroundColor: "#FEF3C7" },
-  warn: { backgroundColor: "#FFE4E6" },
-  copy: { flex: 1, gap: 2 },
-  title: { fontWeight: "600", color: "#134E4A", fontSize: 13 },
-  meta: { color: "#57534E", fontSize: 12 },
-  error: { color: "#BE123C", fontSize: 12 },
-  actions: { flexDirection: "row", gap: 6 },
-  btn: {
-    backgroundColor: "#0F766E",
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    minWidth: 52,
-    alignItems: "center",
-  },
-  btnDisabled: { opacity: 0.5 },
-  btnText: { color: "#fff", fontWeight: "600", fontSize: 12 },
+  banner: { flexDirection: "row", alignItems: "center", gap: 10 },
+  iconWrap: { width: 24, alignItems: "center" },
+  copy: { flex: 1 },
+  actions: { flexDirection: "row", alignItems: "center", gap: 12 },
 });

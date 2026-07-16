@@ -44,6 +44,13 @@ from app.models.theory_of_change import TheoryOfChange
 from app.models.user import User
 from app.models.work_plan import WorkPlan
 from app.models.knowledge_chunk import KnowledgeChunk
+from app.models.field_device import (
+    FieldDevice,
+    MediaUploadRecord,
+    SyncConflictLog,
+    SyncMutationLog,
+    SyncSession,
+)
 from app.models.workflow import (
     Workflow,
     WorkflowApproval,
@@ -115,4 +122,9 @@ __all__ = [
     "WorkflowRunStep",
     "WorkflowApproval",
     "WorkflowSchedule",
+    "FieldDevice",
+    "SyncSession",
+    "SyncMutationLog",
+    "SyncConflictLog",
+    "MediaUploadRecord",
 ]
