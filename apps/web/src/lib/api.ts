@@ -978,6 +978,198 @@ export type IndicatorProgressRow = {
   period_end?: string | null;
 };
 
+// --------------------------------------------------------------------------- //
+// Workflow engine (Epic 3)
+// --------------------------------------------------------------------------- //
+
+export type WorkflowCatalogItem = {
+  code: string;
+  label: string;
+  category?: string;
+};
+
+export type WorkflowOperator = { code: string; label: string };
+
+export type WorkflowConditionLeaf = {
+  field: string;
+  cmp: string;
+  value?: unknown;
+};
+
+export type WorkflowConditionGroup = {
+  op: "and" | "or";
+  rules: WorkflowConditionNode[];
+};
+
+export type WorkflowConditionNode =
+  | WorkflowConditionLeaf
+  | WorkflowConditionGroup;
+
+export type WorkflowTrigger = {
+  type: string;
+  conditions?: WorkflowConditionGroup | null;
+  [key: string]: unknown;
+};
+
+export type WorkflowAction = {
+  id: string;
+  type: string;
+  name?: string;
+  config: Record<string, unknown>;
+  conditions?: WorkflowConditionGroup | null;
+};
+
+export type WorkflowSettings = {
+  max_attempts?: number;
+  stop_on_error?: boolean;
+  [key: string]: unknown;
+};
+
+export type WorkflowDefinition = {
+  trigger: WorkflowTrigger;
+  actions: WorkflowAction[];
+  settings: WorkflowSettings;
+};
+
+export type Workflow = {
+  id: string;
+  organization_id: string;
+  name: string;
+  code: string;
+  description?: string | null;
+  category?: string | null;
+  status: string;
+  current_version: number;
+  is_template: boolean;
+  cloned_from_id?: string | null;
+  created_by_id?: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type WorkflowDetail = Workflow & {
+  definition: WorkflowDefinition;
+  metadata?: Record<string, unknown>;
+};
+
+export type WorkflowVersion = {
+  id: string;
+  workflow_id: string;
+  version: number;
+  title: string;
+  changelog?: string | null;
+  published_at?: string | null;
+  created_by_id?: string | null;
+  created_at: string;
+};
+
+export type WorkflowVersionDetail = WorkflowVersion & {
+  definition: WorkflowDefinition;
+};
+
+export type WorkflowRun = {
+  id: string;
+  organization_id: string;
+  workflow_id: string;
+  workflow_version_id: string;
+  status: string;
+  trigger_type: string;
+  trigger_event?: string | null;
+  error_message?: string | null;
+  attempt_count: number;
+  max_attempts: number;
+  next_attempt_at?: string | null;
+  started_at?: string | null;
+  finished_at?: string | null;
+  created_by_id?: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type WorkflowRunStep = {
+  id: string;
+  run_id: string;
+  step_index: number;
+  action_id: string;
+  action_type: string;
+  status: string;
+  input_json: Record<string, unknown>;
+  output_json: Record<string, unknown>;
+  error_message?: string | null;
+  attempt_count: number;
+  started_at?: string | null;
+  finished_at?: string | null;
+};
+
+export type WorkflowRunDetail = WorkflowRun & {
+  steps: WorkflowRunStep[];
+  trigger_payload: Record<string, unknown>;
+  context: Record<string, unknown>;
+};
+
+export type WorkflowApproval = {
+  id: string;
+  organization_id: string;
+  run_id: string;
+  step_id: string;
+  status: string;
+  assignee_id?: string | null;
+  comments?: string | null;
+  decided_at?: string | null;
+  decided_by_id?: string | null;
+  due_at?: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type WorkflowSchedule = {
+  id: string;
+  organization_id: string;
+  workflow_id: string;
+  cadence: string;
+  cron_expr?: string | null;
+  timezone: string;
+  enabled: boolean;
+  next_run_at?: string | null;
+  last_run_at?: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type WorkflowTemplate = {
+  code: string;
+  name: string;
+  category?: string | null;
+  description?: string | null;
+  definition: WorkflowDefinition;
+  workflow_id?: string;
+};
+
+export type WorkflowMetrics = {
+  workflow_status_counts: Record<string, number>;
+  run_status_counts: Record<string, number>;
+  runs_last_7d: number;
+  success_rate_7d: number;
+  failure_rate_7d: number;
+  queue_depth: number;
+  pending_approvals: number;
+};
+
+export type WorkflowDefinitionExport = {
+  name?: string;
+  code?: string;
+  category?: string | null;
+  definition: WorkflowDefinition;
+  [key: string]: unknown;
+};
+
+export type AiWorkflowDraft = {
+  definition: WorkflowDefinition;
+  explanation: string;
+  provider: string;
+  workflow_id?: string | null;
+};
+
 type ApiError = {
   message?: string;
   code?: string;
@@ -2061,6 +2253,222 @@ class ApiClient {
     });
     if (!res.ok) throw new Error("Export failed");
     return res.text();
+  }
+
+  // ------------------------------------------------------------------------- //
+  // Workflow engine (Epic 3)
+  // ------------------------------------------------------------------------- //
+
+  listWorkflowTriggers() {
+    return this.request<{ triggers: WorkflowCatalogItem[] }>(
+      "/workflows/triggers",
+    );
+  }
+
+  listWorkflowActions() {
+    return this.request<{ actions: WorkflowCatalogItem[] }>("/workflows/actions");
+  }
+
+  listWorkflowOperators() {
+    return this.request<{ operators: WorkflowOperator[] }>(
+      "/workflows/operators",
+    );
+  }
+
+  listWorkflowTemplates() {
+    return this.request<{ templates: WorkflowTemplate[] }>(
+      "/workflows/templates",
+    );
+  }
+
+  cloneWorkflowTemplate(templateCode: string) {
+    return this.request<Workflow>(
+      `/workflows/templates/${encodeURIComponent(templateCode)}/clone`,
+      { method: "POST" },
+    );
+  }
+
+  workflowMetrics() {
+    return this.request<WorkflowMetrics>("/workflows/metrics");
+  }
+
+  listWorkflows(
+    params: {
+      page?: number;
+      status?: string;
+      category?: string;
+      is_template?: boolean;
+      search?: string;
+    } = {},
+  ) {
+    const q = new URLSearchParams({ page_size: "100" });
+    if (params.page) q.set("page", String(params.page));
+    if (params.status) q.set("status", params.status);
+    if (params.category) q.set("category", params.category);
+    if (typeof params.is_template === "boolean")
+      q.set("is_template", String(params.is_template));
+    if (params.search) q.set("search", params.search);
+    return this.request<Paginated<Workflow>>(`/workflows?${q}`);
+  }
+
+  createWorkflow(body: Record<string, unknown>) {
+    return this.request<Workflow>("/workflows", {
+      method: "POST",
+      body: JSON.stringify(body),
+    });
+  }
+
+  getWorkflow(id: string) {
+    return this.request<WorkflowDetail>(`/workflows/${id}`);
+  }
+
+  updateWorkflow(id: string, body: Record<string, unknown>) {
+    return this.request<WorkflowDetail>(`/workflows/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    });
+  }
+
+  cloneWorkflow(id: string, name?: string) {
+    return this.request<Workflow>(`/workflows/${id}/clone`, {
+      method: "POST",
+      body: JSON.stringify({ name }),
+    });
+  }
+
+  archiveWorkflow(id: string) {
+    return this.request<Workflow>(`/workflows/${id}/archive`, { method: "POST" });
+  }
+
+  enableWorkflow(id: string) {
+    return this.request<Workflow>(`/workflows/${id}/enable`, { method: "POST" });
+  }
+
+  disableWorkflow(id: string) {
+    return this.request<Workflow>(`/workflows/${id}/disable`, { method: "POST" });
+  }
+
+  activateWorkflow(id: string) {
+    return this.request<Workflow>(`/workflows/${id}/activate`, { method: "POST" });
+  }
+
+  listWorkflowVersions(id: string) {
+    return this.request<WorkflowVersion[]>(`/workflows/${id}/versions`);
+  }
+
+  getWorkflowVersion(id: string, version: number) {
+    return this.request<WorkflowVersionDetail>(
+      `/workflows/${id}/versions/${version}`,
+    );
+  }
+
+  exportWorkflowDefinition(id: string) {
+    return this.request<WorkflowDefinitionExport>(
+      `/workflows/${id}/export-definition`,
+    );
+  }
+
+  importWorkflowDefinition(
+    id: string,
+    definition: WorkflowDefinition,
+    changelog?: string,
+  ) {
+    return this.request<WorkflowVersion>(`/workflows/${id}/import-definition`, {
+      method: "POST",
+      body: JSON.stringify({ definition, changelog }),
+    });
+  }
+
+  runWorkflow(id: string, inputs?: Record<string, unknown>) {
+    return this.request<WorkflowRun>(`/workflows/${id}/run`, {
+      method: "POST",
+      body: JSON.stringify({ inputs }),
+    });
+  }
+
+  listWorkflowRuns(
+    params: { workflow_id?: string; status?: string; page?: number } = {},
+  ) {
+    const q = new URLSearchParams({ page_size: "50" });
+    if (params.workflow_id) q.set("workflow_id", params.workflow_id);
+    if (params.status) q.set("status", params.status);
+    if (params.page) q.set("page", String(params.page));
+    return this.request<Paginated<WorkflowRun>>(`/workflow-runs?${q}`);
+  }
+
+  getWorkflowRun(id: string) {
+    return this.request<WorkflowRunDetail>(`/workflow-runs/${id}`);
+  }
+
+  cancelWorkflowRun(id: string) {
+    return this.request<WorkflowRun>(`/workflow-runs/${id}/cancel`, {
+      method: "POST",
+    });
+  }
+
+  listWorkflowApprovals(
+    params: { status?: string; mine?: boolean; page?: number } = {},
+  ) {
+    const q = new URLSearchParams({ page_size: "50" });
+    if (params.status) q.set("status", params.status);
+    if (params.mine) q.set("mine", "true");
+    if (params.page) q.set("page", String(params.page));
+    return this.request<Paginated<WorkflowApproval>>(`/workflow-approvals?${q}`);
+  }
+
+  decideWorkflowApproval(
+    id: string,
+    decision: "approved" | "rejected" | "returned",
+    comments?: string,
+  ) {
+    return this.request<WorkflowApproval>(
+      `/workflow-approvals/${id}/decide`,
+      {
+        method: "POST",
+        body: JSON.stringify({ decision, comments }),
+      },
+    );
+  }
+
+  listWorkflowSchedules(workflowId: string) {
+    return this.request<WorkflowSchedule[]>(
+      `/workflows/${workflowId}/schedules`,
+    );
+  }
+
+  createWorkflowSchedule(workflowId: string, body: Record<string, unknown>) {
+    return this.request<WorkflowSchedule>(`/workflows/${workflowId}/schedules`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    });
+  }
+
+  updateWorkflowSchedule(
+    workflowId: string,
+    scheduleId: string,
+    body: Record<string, unknown>,
+  ) {
+    return this.request<WorkflowSchedule>(
+      `/workflows/${workflowId}/schedules/${scheduleId}`,
+      {
+        method: "PATCH",
+        body: JSON.stringify(body),
+      },
+    );
+  }
+
+  deleteWorkflowSchedule(workflowId: string, scheduleId: string) {
+    return this.request<{ message: string }>(
+      `/workflows/${workflowId}/schedules/${scheduleId}`,
+      { method: "DELETE" },
+    );
+  }
+
+  draftAiWorkflow(prompt: string, save = false) {
+    return this.request<AiWorkflowDraft>("/ai/workflows/draft", {
+      method: "POST",
+      body: JSON.stringify({ prompt, save }),
+    });
   }
 }
 

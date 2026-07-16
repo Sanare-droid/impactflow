@@ -90,6 +90,9 @@ PERMISSION_CATALOG: list[dict[str, str]] = [
     {"code": "api_keys:manage", "module": "api_keys", "action": "manage", "description": "Manage API keys"},
     {"code": "branding:read", "module": "branding", "action": "read", "description": "View white-label branding"},
     {"code": "branding:manage", "module": "branding", "action": "manage", "description": "Manage white-label branding"},
+    {"code": "workflows:read", "module": "workflows", "action": "read", "description": "View workflows, runs, and approvals"},
+    {"code": "workflows:manage", "module": "workflows", "action": "manage", "description": "Create and manage workflows"},
+    {"code": "workflows:approve", "module": "workflows", "action": "approve", "description": "Decide workflow approvals"},
 ]
 
 # Default system roles and their permission codes
@@ -169,6 +172,9 @@ SYSTEM_ROLES: dict[str, dict] = {
             "api_keys:manage",
             "branding:read",
             "branding:manage",
+            "workflows:read",
+            "workflows:manage",
+            "workflows:approve",
         ],
     },
     "meal_officer": {
@@ -220,6 +226,8 @@ SYSTEM_ROLES: dict[str, dict] = {
             "knowledge:manage",
             "marketplace:read",
             "integrations:read",
+            "workflows:read",
+            "workflows:approve",
         ],
     },
     "field_officer": {
@@ -246,6 +254,7 @@ SYSTEM_ROLES: dict[str, dict] = {
             "evidence:read",
             "evidence:manage",
             "maps:read",
+            "workflows:read",
         ],
     },
     "viewer": {
@@ -281,6 +290,7 @@ SYSTEM_ROLES: dict[str, dict] = {
             "knowledge:read",
             "marketplace:read",
             "integrations:read",
+            "workflows:read",
         ],
         "is_default": True,
     },

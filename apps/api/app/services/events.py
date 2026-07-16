@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 from typing import Any, Optional
 from uuid import UUID
 
@@ -14,6 +15,8 @@ from app.db.base import utcnow
 from app.models.notification import WebhookDelivery
 from app.models.platform import IntegrationConnection
 from app.services import notifications as notification_service
+
+logger = logging.getLogger(__name__)
 
 # Events integrations may subscribe to via `events` JSON list
 EVENT_PREDICTION_OPENED = "prediction.opened"
@@ -125,7 +128,34 @@ async def emit_event(
             event_type=event_type,
             payload=payload,
         )
+
+    # Fan the event out to the workflow engine. Never let workflow issues break
+    # the core notify/webhook path.
+    workflow_runs = 0
+    try:
+        from app.services import workflows as wf
+
+        runs = await wf.enqueue_matching_runs(
+            db,
+            organization_id,
+            event_type,
+            {
+                "event": event_type,
+                "title": title,
+                "body": body,
+                "link": link,
+                "severity": severity,
+                "resource_type": resource_type,
+                "resource_id": resource_id,
+                "metadata": metadata or {},
+            },
+        )
+        workflow_runs = len(runs)
+    except Exception:  # noqa: BLE001
+        logger.exception("workflows.enqueue_matching_runs_failed event=%s", event_type)
+
     return {
         "notifications": len(notifications),
         "webhook_deliveries": len(deliveries),
+        "workflow_runs": workflow_runs,
     }

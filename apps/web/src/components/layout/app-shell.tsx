@@ -41,6 +41,7 @@ import {
   Palette,
   Bell,
   ClipboardList,
+  Workflow,
   type LucideIcon,
 } from "lucide-react";
 import { useTheme } from "next-themes";
@@ -119,6 +120,7 @@ const navGroups: NavGroup[] = [
   {
     label: "Platform",
     items: [
+      { href: "/app/workflows", label: "Workflows", icon: Workflow },
       { href: "/app/marketplace", label: "Marketplace", icon: Store },
       { href: "/app/integrations", label: "Integrations", icon: Plug },
       { href: "/app/branding", label: "White label", icon: Palette },

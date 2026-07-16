@@ -1507,6 +1507,19 @@ class AiInsightsScanRequest(BaseModel):
     persist: bool = False
 
 
+class AiWorkflowDraftRequest(BaseModel):
+    prompt: str = Field(min_length=1, max_length=4000)
+    page_context: Optional[dict[str, Any]] = None
+    save: bool = False
+
+
+class AiWorkflowDraftResponse(BaseModel):
+    definition: dict[str, Any]
+    explanation: str
+    provider: str
+    workflow_id: Optional[str] = None
+
+
 class AiReportGenerateRequest(BaseModel):
     report_type: str = Field(default="monthly", max_length=64)
     program_id: Optional[UUID] = None

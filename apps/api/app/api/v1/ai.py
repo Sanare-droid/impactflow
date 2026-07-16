@@ -10,7 +10,7 @@ from fastapi.responses import PlainTextResponse, StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import RequestContext, client_meta, require_permissions
-from app.core.exceptions import NotFoundError
+from app.core.exceptions import ForbiddenError, NotFoundError
 from app.db.session import get_db
 from app.schemas import (
     AiConversationCreateRequest,
@@ -29,6 +29,8 @@ from app.schemas import (
     AiPredictionUpdateRequest,
     AiReportGenerateRequest,
     AiReportResponse,
+    AiWorkflowDraftRequest,
+    AiWorkflowDraftResponse,
     KnowledgeCreateRequest,
     KnowledgeResponse,
     KnowledgeUpdateRequest,
@@ -379,6 +381,37 @@ async def archive_conversation(
         user_agent=ua,
     )
     return AiConversationResponse.model_validate(conv)
+
+
+# -------- Workflow drafting --------
+
+
+@router.post("/ai/workflows/draft", response_model=AiWorkflowDraftResponse)
+async def draft_workflow(
+    body: AiWorkflowDraftRequest,
+    request: Request,
+    ctx: Annotated[RequestContext, Depends(require_permissions("ai:use"))],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> AiWorkflowDraftResponse:
+    org_id = _require_org(ctx)
+    if body.save and not ctx.has_permission("workflows:manage"):
+        raise ForbiddenError(
+            "Saving a drafted workflow requires workflows:manage",
+            details={"required": ["workflows:manage"]},
+        )
+    ip, ua = client_meta(request)
+    await enforce_rate_limit(key=f"rl:ai:wf:{org_id}:{ip}", limit=20, window_seconds=60)
+    result = await ai_service.draft_workflow(
+        db,
+        organization_id=org_id,
+        actor_id=ctx.user.id,
+        prompt=body.prompt,
+        page_context=body.page_context,
+        save=body.save,
+        ip=ip,
+        user_agent=ua,
+    )
+    return AiWorkflowDraftResponse(**result)
 
 
 # -------- Predictions --------

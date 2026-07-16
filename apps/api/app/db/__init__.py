@@ -47,6 +47,14 @@ from app.models.theory_of_change import TheoryOfChange
 from app.models.user import User
 from app.models.work_plan import WorkPlan
 from app.models.knowledge_chunk import KnowledgeChunk
+from app.models.workflow import (
+    Workflow,
+    WorkflowApproval,
+    WorkflowRun,
+    WorkflowRunStep,
+    WorkflowSchedule,
+    WorkflowVersion,
+)
 
 __all__ = [
     "Base",
@@ -105,4 +113,10 @@ __all__ = [
     "SurveyResponse",
     "SurveyAnswer",
     "SurveyResponseAttachment",
+    "Workflow",
+    "WorkflowVersion",
+    "WorkflowRun",
+    "WorkflowRunStep",
+    "WorkflowApproval",
+    "WorkflowSchedule",
 ]

@@ -555,6 +555,125 @@ async def generate_report(
     return {**report, "narrative_id": narrative_id}
 
 
+# -------- Workflow drafting (AI drafts JSON only; never executes) --------
+
+
+async def draft_workflow(
+    db: AsyncSession,
+    *,
+    organization_id: UUID,
+    actor_id: UUID,
+    prompt: str,
+    page_context: Optional[dict] = None,
+    save: bool = False,
+    ip: Optional[str] = None,
+    user_agent: Optional[str] = None,
+) -> dict[str, Any]:
+    """Draft a workflow definition from a natural-language prompt.
+
+    The model may ONLY produce a JSON definition; it never executes anything.
+    When ``save`` is true a *draft* workflow is created (never activated).
+    """
+    from app.services import workflow_schema
+
+    triggers = ", ".join(t["code"] for t in workflow_schema.list_trigger_types())
+    actions = ", ".join(a["code"] for a in workflow_schema.list_action_types())
+    operators = ", ".join(o["code"] for o in workflow_schema.list_condition_operators())
+    system = (
+        "You are a workflow automation designer for an NGO MEAL platform. "
+        "Return ONLY a single JSON object (no prose, no markdown) describing a workflow "
+        "definition with this shape: {\"trigger\": {\"type\": <trigger>}, "
+        "\"conditions\": <optional condition tree>, \"actions\": [{\"id\": <str>, "
+        "\"type\": <action>, \"config\": {..}, \"conditions\": <optional>}]}. "
+        f"Valid trigger types: {triggers}. "
+        f"Valid action types: {actions}. "
+        f"Condition leaves are {{\"field\": <dotted path>, \"cmp\": <op>, \"value\": <v>}} "
+        f"where op is one of: {operators}. Condition groups are "
+        "{\"op\": \"and|or\", \"rules\": [..]}. Never invent action or trigger types."
+    )
+    user_prompt = prompt
+    if page_context:
+        import json as _json
+
+        user_prompt = f"{prompt}\n\nContext:\n{_json.dumps(page_context, default=str)[:2000]}"
+
+    result = await ai_provider.chat_completion(
+        [{"role": "user", "content": user_prompt}], system=system
+    )
+    definition = ai_provider._try_parse_json(result["content"])
+    explanation = "AI-drafted workflow definition."
+    if not definition or "actions" not in definition:
+        definition = _fallback_workflow_definition(prompt)
+        explanation = (
+            "Drafted a starter workflow (deterministic fallback — set OPENAI_API_KEY "
+            "for richer drafts). Review and edit before activating."
+        )
+
+    definition = workflow_schema.normalize_definition(definition)
+    workflow_schema.validate_definition(definition)
+
+    db.add(
+        AiRequestLog(
+            organization_id=organization_id,
+            user_id=actor_id,
+            action="workflow_draft",
+            tools_used=["draft_workflow"],
+            model=result.get("model"),
+            provider=result["provider"],
+            success=True,
+            prompt_preview=prompt[:500],
+            metadata_={"saved": bool(save)},
+        )
+    )
+    await db.flush()
+
+    workflow_id: Optional[str] = None
+    if save:
+        from app.services import workflows as wf_service
+
+        workflow = await wf_service.create_workflow(
+            db,
+            organization_id=organization_id,
+            actor_id=actor_id,
+            data={
+                "name": (definition.get("trigger", {}).get("type") or "AI workflow")
+                + " automation",
+                "description": prompt[:500],
+                "status": "draft",
+                "definition": definition,
+                "changelog": "AI-drafted",
+            },
+            ip_address=ip,
+            user_agent=user_agent,
+        )
+        workflow_id = str(workflow.id)
+
+    return {
+        "definition": definition,
+        "explanation": explanation,
+        "provider": result["provider"],
+        "workflow_id": workflow_id,
+    }
+
+
+def _fallback_workflow_definition(prompt: str) -> dict[str, Any]:
+    return {
+        "trigger": {"type": "manual"},
+        "actions": [
+            {
+                "id": "notify",
+                "type": "send_notification",
+                "config": {
+                    "title": "Workflow triggered",
+                    "body": prompt[:200],
+                    "severity": "info",
+                    "role_slugs": ["org_admin", "manager"],
+                },
+            }
+        ],
+    }
+
+
 # -------- Predictions --------
 
 

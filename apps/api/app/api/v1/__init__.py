@@ -13,6 +13,7 @@ from app.api.v1 import (
     platform,
     programs,
     surveys,
+    workflows,
 )
 
 api_router = APIRouter()
@@ -28,3 +29,4 @@ api_router.include_router(ai.router)
 api_router.include_router(platform.router)
 api_router.include_router(notifications.router)
 api_router.include_router(surveys.router)
+api_router.include_router(workflows.router)

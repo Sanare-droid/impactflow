@@ -175,8 +175,8 @@ flowchart LR
 
 ---
 
-## Inventory notes (as of Epic 2 / API 0.14)
+## Inventory notes (as of Epic 3 / API 0.15)
 
-**Exists:** Full A–E stack, Epic 1 dynamic forms engine (schema v2 builder, assignments, analytics, CSV/Excel/HTML export, mobile offline survey sync), and Epic 2 AI Copilot & Organizational Intelligence (tool-grounded chat with citations + streaming, regenerate, message feedback, pin/share/export conversations, dashboard insights card, deterministic risk scan, grounded structured reports, `AiRequestLog` observability; migration `0013_phase13`). See `docs/EPIC2_AI_COPILOT.md` for the delivered DoD checklist.
+**Exists:** Full A–E stack, Epic 1 forms engine, Epic 2 AI Copilot (`docs/EPIC2_AI_COPILOT.md`), and Epic 3 Workflow Engine (`docs/EPIC3_WORKFLOWS.md`): event + schedule triggers, conditions, actions, approvals, templates, builder UI at `/app/workflows`, execution queue hooked into `emit_event` + `run_job_tick`, AI workflow draft assist.
 
-**Deferred:** Public read-only shared-conversation view (token stored, view pending), Kobo/ODK import, native PDF binary, binary media object storage, pgvector column type, OAuth integrations, `@dnd-kit` drag reorder.
+**Deferred:** Public shared-conversation view, freeform graph DnD, SMS/Teams/WhatsApp, full cron engine, Kobo/ODK import, native PDF binary, pgvector, OAuth integrations.

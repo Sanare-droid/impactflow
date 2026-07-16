@@ -16,12 +16,14 @@ from app.db.session import AsyncSessionLocal
 from app.models.notification import WebhookDelivery
 from app.models.platform import IntegrationConnection
 from app.models.task import Task
+from app.services import workflows
 from app.services.events import EVENT_INTEGRATION_ERROR, EVENT_TASK_OVERDUE, emit_event
 
 logger = logging.getLogger(__name__)
 
 BACKOFF_SECONDS = [60, 300, 900, 3600, 7200]
 EVENT_BUDGET_BURN = "budget.burn"
+EVENT_GRANT_EXPIRING = "grant.expiring"
 
 
 def _slack_body(payload: dict[str, Any]) -> dict[str, Any]:
@@ -235,16 +237,61 @@ async def scan_budget_burn(db: AsyncSession) -> int:
     return emitted
 
 
+async def scan_grant_expiring(db: AsyncSession) -> int:
+    """Emit ``grant.expiring`` for grants ending within 14 days (idempotent flag)."""
+    from app.models.grant import Grant
+
+    today = date.today()
+    horizon = today + timedelta(days=14)
+    grants = await db.scalars(
+        select(Grant).where(
+            Grant.end_date.is_not(None),
+            Grant.end_date >= today,
+            Grant.end_date <= horizon,
+            Grant.status.in_(["awarded", "active"]),
+        )
+    )
+    emitted = 0
+    for grant in grants:
+        meta = dict(grant.metadata_ or {})
+        if meta.get("expiring_notified_on") == today.isoformat():
+            continue
+        await emit_event(
+            db,
+            organization_id=grant.organization_id,
+            event_type=EVENT_GRANT_EXPIRING,
+            title=f"Grant expiring soon: {grant.name}",
+            body=f"Ends {grant.end_date}. Review renewal or final reporting.",
+            link="/app/grants",
+            severity="warning",
+            resource_type="grant",
+            resource_id=str(grant.id),
+            role_slugs=["org_admin", "manager"],
+            metadata={"end_date": str(grant.end_date)},
+        )
+        meta["expiring_notified_on"] = today.isoformat()
+        grant.metadata_ = meta
+        emitted += 1
+    await db.flush()
+    return emitted
+
+
 async def run_job_tick() -> dict[str, int]:
     async with AsyncSessionLocal() as db:
         webhooks = await process_webhook_queue(db)
         overdue = await scan_overdue_tasks(db)
         burn = await scan_budget_burn(db)
+        grants_expiring = await scan_grant_expiring(db)
+        sched = await workflows.process_due_schedules(db)
+        runs = await workflows.process_run_queue(db, limit=20)
         await db.commit()
         return {
             "webhooks_processed": webhooks,
             "overdue_tasks_notified": overdue,
             "budget_burn_alerts": burn,
+            "grants_expiring_notified": grants_expiring,
+            "workflow_schedules_enqueued": sched,
+            "workflow_runs_processed": runs.get("processed", 0),
         }
 
 
