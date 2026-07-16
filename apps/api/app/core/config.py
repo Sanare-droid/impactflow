@@ -1,0 +1,82 @@
+from functools import lru_cache
+from typing import List
+
+from pydantic import Field, field_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class Settings(BaseSettings):
+    """Central application configuration. All values come from environment."""
+
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        case_sensitive=False,
+        extra="ignore",
+    )
+
+    app_name: str = "ImpactFlow AI"
+    app_env: str = "development"
+    debug: bool = False
+    api_v1_prefix: str = "/api/v1"
+    frontend_url: str = "http://localhost:3000"
+    backend_cors_origins: List[str] = Field(
+        default_factory=lambda: ["http://localhost:3000"]
+    )
+
+    postgres_host: str = "localhost"
+    postgres_port: int = 5432
+    postgres_user: str = "impactflow"
+    postgres_password: str = "change_me_strong_password"
+    postgres_db: str = "impactflow"
+    database_url: str = (
+        "postgresql+asyncpg://impactflow:change_me_strong_password@localhost:5432/impactflow"
+    )
+
+    redis_url: str = "redis://localhost:6379/0"
+
+    jwt_secret_key: str = "change_me_to_a_64_char_random_secret_key_immediately"
+    jwt_algorithm: str = "HS256"
+    access_token_expire_minutes: int = 15
+    refresh_token_expire_days: int = 30
+    mfa_issuer: str = "ImpactFlow AI"
+
+    encryption_key: str = "generate_a_fernet_key_and_replace_this"
+
+    s3_endpoint_url: str = "http://localhost:9000"
+    s3_access_key: str = "impactflow"
+    s3_secret_key: str = "change_me_minio_secret"
+    s3_bucket: str = "impactflow"
+    s3_region: str = "us-east-1"
+
+    openai_api_key: str = ""
+    openai_model: str = "gpt-4o"
+
+    # Password policy
+    password_min_length: int = 12
+    max_login_attempts: int = 5
+    lockout_minutes: int = 15
+
+    @field_validator("backend_cors_origins", mode="before")
+    @classmethod
+    def parse_cors(cls, value: object) -> object:
+        if isinstance(value, str):
+            value = value.strip()
+            if value.startswith("["):
+                import json
+
+                return json.loads(value)
+            return [origin.strip() for origin in value.split(",") if origin.strip()]
+        return value
+
+    @property
+    def is_production(self) -> bool:
+        return self.app_env.lower() == "production"
+
+
+@lru_cache
+def get_settings() -> Settings:
+    return Settings()
+
+
+settings = get_settings()

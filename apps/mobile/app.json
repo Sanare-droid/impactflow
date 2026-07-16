@@ -1,0 +1,25 @@
+{
+  "expo": {
+    "name": "ImpactFlow Field",
+    "slug": "impactflow-field",
+    "version": "0.6.0",
+    "orientation": "portrait",
+    "scheme": "impactflow",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "ai.impactflow.field"
+    },
+    "android": {
+      "package": "ai.impactflow.field",
+      "adaptiveIcon": {
+        "backgroundColor": "#0F766E"
+      }
+    },
+    "plugins": ["expo-router", "expo-secure-store"],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}

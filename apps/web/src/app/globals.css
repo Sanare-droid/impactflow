@@ -1,0 +1,65 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: #f7f5f2;
+  --foreground: #1c1917;
+  --brand: #0f766e;
+  --brand-foreground: #f0fdfa;
+  --surface: rgba(255, 255, 255, 0.72);
+  --border: rgba(28, 25, 23, 0.08);
+}
+
+.dark {
+  --background: #0c0a09;
+  --foreground: #f5f5f4;
+  --brand: #14b8a6;
+  --brand-foreground: #042f2e;
+  --surface: rgba(12, 10, 9, 0.72);
+  --border: rgba(245, 245, 244, 0.08);
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  color: var(--foreground);
+  background: var(--background);
+  font-family: var(--font-body), ui-sans-serif, system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+.font-display {
+  font-family: var(--font-display), ui-sans-serif, system-ui, sans-serif;
+}
+
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes soft-pulse {
+  0%,
+  100% {
+    opacity: 0.55;
+  }
+  50% {
+    opacity: 0.9;
+  }
+}
+
+.animate-fade-up {
+  animation: fade-up 0.55s ease-out both;
+}
+
+.animate-soft-pulse {
+  animation: soft-pulse 4.5s ease-in-out infinite;
+}
