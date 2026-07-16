@@ -4,6 +4,8 @@ import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import {
   Activity,
+  AlertTriangle,
+  ArrowRight,
   CheckSquare,
   ClipboardCheck,
   ClipboardList,
@@ -12,7 +14,9 @@ import {
   HandCoins,
   Landmark,
   Layers3,
+  Lightbulb,
   MapPinned,
+  Sparkles,
   Target,
   UsersRound,
   Wallet,
@@ -20,6 +24,108 @@ import {
 import { api } from "@/lib/api";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
 import { useAuth } from "@/providers/auth-provider";
+
+const RISK_TONE: Record<string, string> = {
+  critical: "text-rose-600 dark:text-rose-400",
+  high: "text-rose-600 dark:text-rose-400",
+  medium: "text-amber-600 dark:text-amber-400",
+  low: "text-stone-500 dark:text-stone-400",
+};
+
+function AiInsightsCard() {
+  const { data, isLoading, isError } = useQuery({
+    queryKey: ["ai-dashboard-insights"],
+    queryFn: () => api.dashboardInsights(),
+    retry: false,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  // Fail soft: if the endpoint errors, render nothing.
+  if (isError) return null;
+
+  return (
+    <Card>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <CardTitle className="flex items-center gap-2">
+            <Sparkles className="h-4 w-4 text-teal-600 dark:text-teal-400" />
+            AI insights
+          </CardTitle>
+          <CardDescription>
+            {isLoading
+              ? "Scanning your portfolio…"
+              : (data?.summary ?? "No insights available yet.")}
+          </CardDescription>
+        </div>
+        <Link
+          href="/app/copilot"
+          className="shrink-0 text-sm font-medium text-teal-700 hover:text-teal-800 dark:text-teal-300"
+        >
+          Ask Copilot
+        </Link>
+      </div>
+
+      {!isLoading && data && (
+        <div className="mt-5 grid gap-5 md:grid-cols-2">
+          <div>
+            <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-stone-500">
+              <AlertTriangle className="h-3.5 w-3.5" /> Key risks
+            </p>
+            <ul className="mt-2 space-y-2 text-sm">
+              {data.key_risks.slice(0, 3).map((r, i) => (
+                <li key={`${r.type}-${i}`} className="flex gap-2">
+                  <span
+                    className={`mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-current ${
+                      RISK_TONE[r.severity] ?? RISK_TONE.low
+                    }`}
+                  />
+                  <span className="text-stone-700 dark:text-stone-300">
+                    {r.title}
+                  </span>
+                </li>
+              ))}
+              {data.key_risks.length === 0 && (
+                <li className="text-stone-400">No active risk signals.</li>
+              )}
+            </ul>
+          </div>
+
+          <div>
+            <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-stone-500">
+              <Lightbulb className="h-3.5 w-3.5" /> Recommendations
+            </p>
+            <ul className="mt-2 space-y-2 text-sm">
+              {data.recommendations.slice(0, 3).map((rec, i) => (
+                <li
+                  key={i}
+                  className="flex gap-2 text-stone-700 dark:text-stone-300"
+                >
+                  <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-teal-500" />
+                  {rec}
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      )}
+
+      <div className="mt-5 flex flex-wrap gap-4 border-t border-stone-100 pt-4 text-sm dark:border-stone-800">
+        <Link
+          href="/app/predictions"
+          className="inline-flex items-center gap-1 font-medium text-stone-600 hover:text-teal-700 dark:text-stone-300 dark:hover:text-teal-300"
+        >
+          View predictions <ArrowRight className="h-3.5 w-3.5" />
+        </Link>
+        <Link
+          href="/app/copilot"
+          className="inline-flex items-center gap-1 font-medium text-stone-600 hover:text-teal-700 dark:text-stone-300 dark:hover:text-teal-300"
+        >
+          Open Copilot <ArrowRight className="h-3.5 w-3.5" />
+        </Link>
+      </div>
+    </Card>
+  );
+}
 
 export default function DashboardPage() {
   const { user } = useAuth();
@@ -111,6 +217,8 @@ export default function DashboardPage() {
           );
         })}
       </div>
+
+      <AiInsightsCard />
 
       <div className="grid gap-4 lg:grid-cols-2">
         <Card>

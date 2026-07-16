@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import secrets
 from decimal import Decimal
 from typing import Any, Optional
 from uuid import UUID
@@ -9,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.exceptions import NotFoundError
-from app.models.ai import AiConversation, AiMessage
+from app.models.ai import AiConversation, AiMessage, AiRequestLog
 from app.models.knowledge import KnowledgeDocument
 from app.models.narrative import AiNarrative
 from app.models.prediction import AiPrediction
@@ -114,6 +115,8 @@ async def list_conversations(
     page: int,
     page_size: int,
     status: Optional[str] = None,
+    pinned: Optional[bool] = None,
+    pinned_first: bool = True,
 ) -> tuple[list[AiConversation], int]:
     filters = [
         AiConversation.organization_id == organization_id,
@@ -121,11 +124,18 @@ async def list_conversations(
     ]
     if status:
         filters.append(AiConversation.status == status)
+    if pinned is not None:
+        filters.append(AiConversation.pinned == pinned)
     total = await db.scalar(select(func.count()).select_from(AiConversation).where(*filters))
+    order = (
+        [AiConversation.pinned.desc(), AiConversation.updated_at.desc()]
+        if pinned_first
+        else [AiConversation.updated_at.desc()]
+    )
     result = await db.scalars(
         select(AiConversation)
         .where(*filters)
-        .order_by(AiConversation.updated_at.desc())
+        .order_by(*order)
         .offset((page - 1) * page_size)
         .limit(page_size)
     )
@@ -189,68 +199,137 @@ async def send_message(
     user_id: UUID,
     conversation_id: UUID,
     content: str,
+    permissions: Optional[list[str]] = None,
+    page_context: Optional[dict] = None,
     ip: Optional[str] = None,
     user_agent: Optional[str] = None,
 ) -> tuple[AiConversation, AiMessage, AiMessage]:
-    conv = await get_conversation(db, organization_id, user_id, conversation_id)
-    user_msg = AiMessage(
-        organization_id=organization_id,
-        conversation_id=conv.id,
-        role="user",
-        content=content,
-        provider="user",
-    )
-    db.add(user_msg)
-    await db.flush()
+    """Delegate a copilot turn to the grounded orchestrator.
 
-    # Ground with knowledge snippets + org snapshot
-    knowledge_hits = await search_knowledge(db, organization_id, query=content, limit=3)
-    snapshot = await _org_snapshot(db, organization_id)
-    knowledge_block = "\n\n".join(
-        f"[{d.code}] {d.name}: {(d.summary or d.content)[:400]}" for d in knowledge_hits
-    )
-    history = [
-        {"role": m.role, "content": m.content}
-        for m in conv.messages
-        if m.role in ("user", "assistant")
-    ]
-    history.append({"role": "user", "content": content})
-    system = (
-        ai_provider.SYSTEM_PROMPT
-        + f"\n\nOrganization snapshot: {snapshot}"
-        + (f"\n\nRelevant knowledge:\n{knowledge_block}" if knowledge_block else "")
-    )
-    result = await ai_provider.chat_completion(history, system=system)
-    assistant = AiMessage(
+    Kept as the stable service entrypoint; business logic lives in
+    ``ai_orchestrator.run_turn``. Citations are stored on the assistant message
+    metadata.
+    """
+    from app.services import ai_orchestrator
+
+    conv, user_msg, assistant, _citations = await ai_orchestrator.run_turn(
+        db,
         organization_id=organization_id,
-        conversation_id=conv.id,
-        role="assistant",
-        content=result["content"],
-        provider=result["provider"],
-        model=result.get("model"),
-        token_count=result.get("token_count"),
-        metadata_={"knowledge_ids": [str(d.id) for d in knowledge_hits]},
+        user_id=user_id,
+        conversation_id=conversation_id,
+        content=content,
+        permissions=permissions or [],
+        page_context=page_context,
+        ip=ip,
+        user_agent=user_agent,
     )
-    db.add(assistant)
-    if conv.title == "New conversation" and content.strip():
-        conv.title = content.strip()[:80]
+    return conv, user_msg, assistant
+
+
+async def update_conversation(
+    db: AsyncSession,
+    *,
+    organization_id: UUID,
+    user_id: UUID,
+    conversation_id: UUID,
+    title: Optional[str] = None,
+    pinned: Optional[bool] = None,
+    ip: Optional[str] = None,
+    user_agent: Optional[str] = None,
+) -> AiConversation:
+    conv = await get_conversation(db, organization_id, user_id, conversation_id)
+    changes: dict[str, Any] = {}
+    if title is not None and title.strip():
+        conv.title = title.strip()[:255]
+        changes["title"] = conv.title
+    if pinned is not None:
+        conv.pinned = pinned
+        changes["pinned"] = pinned
     await db.flush()
     await write_audit_log(
         db,
         organization_id=organization_id,
         actor_id=user_id,
-        action="ai.conversation.message",
+        action="ai.conversation.update",
         resource_type="ai_conversation",
         resource_id=str(conv.id),
-        description="Sent AI copilot message",
+        description=f"Updated AI conversation '{conv.title}'",
         ip_address=ip,
         user_agent=user_agent,
-        changes={"provider": result["provider"]},
+        changes=changes,
     )
     await db.refresh(conv)
-    await db.refresh(user_msg)
-    await db.refresh(assistant)
-    return conv, user_msg, assistant
+    return conv
+
+
+async def pin_conversation(
+    db: AsyncSession,
+    *,
+    organization_id: UUID,
+    user_id: UUID,
+    conversation_id: UUID,
+    ip: Optional[str] = None,
+    user_agent: Optional[str] = None,
+) -> AiConversation:
+    return await update_conversation(
+        db,
+        organization_id=organization_id,
+        user_id=user_id,
+        conversation_id=conversation_id,
+        pinned=True,
+        ip=ip,
+        user_agent=user_agent,
+    )
+
+
+async def unpin(
+    db: AsyncSession,
+    *,
+    organization_id: UUID,
+    user_id: UUID,
+    conversation_id: UUID,
+    ip: Optional[str] = None,
+    user_agent: Optional[str] = None,
+) -> AiConversation:
+    return await update_conversation(
+        db,
+        organization_id=organization_id,
+        user_id=user_id,
+        conversation_id=conversation_id,
+        pinned=False,
+        ip=ip,
+        user_agent=user_agent,
+    )
+
+
+async def set_message_feedback(
+    db: AsyncSession,
+    *,
+    organization_id: UUID,
+    user_id: UUID,
+    message_id: UUID,
+    feedback: str,
+) -> AiMessage:
+    """Record thumbs up/down feedback on an assistant message (org-scoped)."""
+    if feedback not in ("up", "down"):
+        raise NotFoundError("Invalid feedback value")
+    msg = await db.scalar(
+        select(AiMessage)
+        .join(AiConversation, AiMessage.conversation_id == AiConversation.id)
+        .where(
+            AiMessage.id == message_id,
+            AiMessage.organization_id == organization_id,
+            AiConversation.user_id == user_id,
+        )
+    )
+    if not msg:
+        raise NotFoundError("Message not found")
+    meta = dict(msg.metadata_ or {})
+    meta["feedback"] = feedback
+    msg.metadata_ = meta
+    await db.flush()
+    await db.refresh(msg)
+    return msg
 
 
 async def archive_conversation(
@@ -278,6 +357,202 @@ async def archive_conversation(
     )
     await db.refresh(conv)
     return conv
+
+
+async def share_conversation(
+    db: AsyncSession,
+    *,
+    organization_id: UUID,
+    user_id: UUID,
+    conversation_id: UUID,
+    ip: Optional[str] = None,
+    user_agent: Optional[str] = None,
+) -> AiConversation:
+    """Ensure the conversation has a share token (same-user sharing for now).
+
+    Generates a stable ``secrets.token_urlsafe(16)`` token if one is not already
+    set; the token is persisted for a future public read-only view.
+    """
+    conv = await get_conversation(db, organization_id, user_id, conversation_id)
+    if not conv.share_token:
+        conv.share_token = secrets.token_urlsafe(16)
+        await db.flush()
+        await write_audit_log(
+            db,
+            organization_id=organization_id,
+            actor_id=user_id,
+            action="ai.conversation.share",
+            resource_type="ai_conversation",
+            resource_id=str(conv.id),
+            description=f"Shared AI conversation '{conv.title}'",
+            ip_address=ip,
+            user_agent=user_agent,
+        )
+        await db.refresh(conv)
+    return conv
+
+
+# -------- Intelligence wrappers --------
+
+
+async def dashboard_insights(db: AsyncSession, organization_id: UUID) -> dict[str, Any]:
+    from app.services import ai_orchestrator
+
+    return await ai_orchestrator.dashboard_insights(db, organization_id)
+
+
+async def suggested_questions(db: AsyncSession, organization_id: UUID) -> list[str]:
+    from app.services import ai_orchestrator
+
+    snapshot = await _org_snapshot(db, organization_id)
+    return ai_orchestrator.suggested_questions(snapshot)
+
+
+async def scan_and_persist_predictions(
+    db: AsyncSession,
+    *,
+    organization_id: UUID,
+    actor_id: UUID,
+    persist: bool = False,
+    ip: Optional[str] = None,
+    user_agent: Optional[str] = None,
+) -> dict[str, Any]:
+    """Run the deterministic portfolio risk scan; optionally persist as predictions."""
+    from app.services import ai_intelligence
+
+    risks = await ai_intelligence.scan_portfolio_risks(db, organization_id)
+
+    created: list[str] = []
+    if persist:
+        for risk in risks:
+            if risk.get("severity") not in ("high", "critical"):
+                continue
+            pred = AiPrediction(
+                organization_id=organization_id,
+                prediction_type=risk.get("type", "portfolio_risk"),
+                title=str(risk.get("title") or "Portfolio risk")[:255],
+                summary=str(risk.get("summary") or ""),
+                severity=str(risk.get("severity") or "medium"),
+                score=_dec(90 if risk.get("severity") == "critical" else 75),
+                recommendations=[risk["recommendation"]] if risk.get("recommendation") else [],
+                signals=risk.get("metric") or {},
+                provider="fallback",
+                created_by_id=actor_id,
+            )
+            db.add(pred)
+            await db.flush()
+            created.append(str(pred.id))
+
+        db.add(
+            AiRequestLog(
+                organization_id=organization_id,
+                user_id=actor_id,
+                action="prediction_scan",
+                tools_used=["scan_portfolio_risks"],
+                model=None,
+                provider="fallback",
+                success=True,
+                prompt_preview="portfolio risk scan",
+                metadata_={"risks_found": len(risks), "persisted": len(created)},
+            )
+        )
+        await write_audit_log(
+            db,
+            organization_id=organization_id,
+            actor_id=actor_id,
+            action="ai.prediction.scan",
+            resource_type="ai_prediction",
+            description=f"Scanned portfolio risks ({len(risks)} found, {len(created)} persisted)",
+            ip_address=ip,
+            user_agent=user_agent,
+            changes={"risks_found": len(risks), "persisted": len(created)},
+        )
+
+    return {"risks": risks, "created_prediction_ids": created}
+
+
+async def generate_report(
+    db: AsyncSession,
+    *,
+    organization_id: UUID,
+    actor_id: UUID,
+    report_type: str,
+    program_id: Optional[UUID] = None,
+    project_id: Optional[UUID] = None,
+    permissions: Optional[list[str]] = None,
+    save_narrative: bool = False,
+    ip: Optional[str] = None,
+    user_agent: Optional[str] = None,
+) -> dict[str, Any]:
+    """Generate a grounded structured report; optionally persist it as a narrative."""
+    from app.services import ai_intelligence
+
+    if program_id:
+        await _assert_program(db, organization_id, program_id)
+    if project_id:
+        await _assert_project(db, organization_id, project_id)
+
+    report = await ai_intelligence.generate_structured_report(
+        db,
+        organization_id,
+        report_type,
+        program_id=program_id,
+        project_id=project_id,
+        permissions=permissions,
+    )
+
+    narrative_id: Optional[str] = None
+    if save_narrative:
+        unique_code = await _ensure_unique_code(
+            db,
+            model=AiNarrative,
+            organization_id=organization_id,
+            code=make_code(report["title"], prefix="NAR-"),
+        )
+        row = AiNarrative(
+            organization_id=organization_id,
+            program_id=program_id,
+            project_id=project_id,
+            name=report["title"],
+            code=unique_code,
+            narrative_type=report["report_type"],
+            content=report["content"],
+            provider=report["provider"],
+            model=report.get("model"),
+            created_by_id=actor_id,
+        )
+        db.add(row)
+        await db.flush()
+        narrative_id = str(row.id)
+        await write_audit_log(
+            db,
+            organization_id=organization_id,
+            actor_id=actor_id,
+            action="ai.narrative.create",
+            resource_type="ai_narrative",
+            resource_id=narrative_id,
+            description=f"Generated structured report '{report['title']}'",
+            ip_address=ip,
+            user_agent=user_agent,
+            changes={"provider": report["provider"], "type": report["report_type"]},
+        )
+
+    db.add(
+        AiRequestLog(
+            organization_id=organization_id,
+            user_id=actor_id,
+            action="report",
+            tools_used=["generate_structured_report"],
+            model=report.get("model"),
+            provider=report["provider"],
+            success=True,
+            prompt_preview=f"{report['report_type']} report",
+            metadata_={"saved_narrative_id": narrative_id},
+        )
+    )
+    await db.flush()
+
+    return {**report, "narrative_id": narrative_id}
 
 
 # -------- Predictions --------

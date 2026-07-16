@@ -550,15 +550,32 @@ export type AnalyticsOverview = {
   evidence_by_type: Record<string, number>;
 };
 
+export type Citation = {
+  type: string;
+  id: string;
+  label: string;
+  href?: string;
+};
+
 export type AiConversation = {
   id: string;
   organization_id: string;
   user_id: string;
   title: string;
   status: string;
+  pinned?: boolean;
+  share_token?: string | null;
   context?: Record<string, unknown>;
+  metadata?: Record<string, unknown> | null;
   created_at: string;
   updated_at: string;
+};
+
+export type AiMessageMetadata = {
+  citations?: Citation[];
+  tools_used?: string[];
+  feedback?: string;
+  [key: string]: unknown;
 };
 
 export type AiMessage = {
@@ -570,8 +587,64 @@ export type AiMessage = {
   model?: string | null;
   provider: string;
   token_count?: number | null;
+  metadata?: AiMessageMetadata | null;
   created_at: string;
   updated_at: string;
+};
+
+export type AiStreamEvent =
+  | { event: "tool_start"; tool: string }
+  | { event: "tool_result"; tool: string; ok: boolean }
+  | { event: "token"; text: string }
+  | {
+      event: "done";
+      conversation_id: string;
+      message_id: string;
+      citations?: Citation[];
+      tools_used?: string[];
+    }
+  | { event: "error"; error: string; detail?: string };
+
+export type AiInsightRisk = {
+  type: string;
+  title: string;
+  summary?: string;
+  severity: string;
+  recommendation?: string;
+  [key: string]: unknown;
+};
+
+export type AiInsightWin = {
+  title: string;
+  detail?: string;
+  indicator_id?: string;
+  [key: string]: unknown;
+};
+
+export type AiInsightAction = {
+  title: string;
+  severity?: string;
+  action?: string | null;
+};
+
+export type AiDashboardInsights = {
+  summary: string;
+  key_risks: AiInsightRisk[];
+  key_wins: AiInsightWin[];
+  recommendations: string[];
+  upcoming_actions: AiInsightAction[];
+  predictions: AiInsightRisk[];
+  generated_at: string;
+};
+
+export type AiReport = {
+  report_type: string;
+  title: string;
+  content: string;
+  provider: string;
+  model?: string | null;
+  generated_at: string;
+  narrative_id?: string | null;
 };
 
 export type AiConversationDetail = AiConversation & {
@@ -1516,8 +1589,10 @@ class ApiClient {
     });
   }
 
-  listAiConversations() {
-    return this.request<Paginated<AiConversation>>("/ai/conversations?page_size=50");
+  listAiConversations(params: { status?: string } = {}) {
+    const q = new URLSearchParams({ page_size: "50" });
+    if (params.status) q.set("status", params.status);
+    return this.request<Paginated<AiConversation>>(`/ai/conversations?${q}`);
   }
 
   createAiConversation(body: Record<string, unknown> = {}) {
@@ -1531,14 +1606,165 @@ class ApiClient {
     return this.request<AiConversationDetail>(`/ai/conversations/${id}`);
   }
 
-  sendAiMessage(conversationId: string, content: string) {
+  updateAiConversation(
+    id: string,
+    body: { title?: string; pinned?: boolean },
+  ) {
+    return this.request<AiConversation>(`/ai/conversations/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    });
+  }
+
+  archiveAiConversation(id: string) {
+    return this.request<AiConversation>(`/ai/conversations/${id}/archive`, {
+      method: "POST",
+    });
+  }
+
+  shareAiConversation(id: string) {
+    return this.request<{ share_token: string; url_path: string }>(
+      `/ai/conversations/${id}/share`,
+      { method: "POST" },
+    );
+  }
+
+  sendAiMessage(
+    conversationId: string,
+    content: string,
+    pageContext?: Record<string, unknown>,
+  ) {
     return this.request<AiConversationDetail>(
       `/ai/conversations/${conversationId}/messages`,
       {
         method: "POST",
-        body: JSON.stringify({ content }),
-      }
+        body: JSON.stringify({
+          content,
+          ...(pageContext ? { page_context: pageContext } : {}),
+        }),
+      },
     );
+  }
+
+  async streamAiMessage(
+    conversationId: string,
+    content: string,
+    onEvent: (event: AiStreamEvent) => void,
+    pageContext?: Record<string, unknown>,
+  ): Promise<void> {
+    this.hydrateFromStorage();
+    const headers = new Headers();
+    headers.set("Content-Type", "application/json");
+    headers.set("Accept", "text/event-stream");
+    if (this.accessToken) {
+      headers.set("Authorization", `Bearer ${this.accessToken}`);
+    }
+    if (this.organizationId) {
+      headers.set("X-Organization-Id", this.organizationId);
+    }
+
+    const res = await fetch(
+      `${API_V1}/ai/conversations/${conversationId}/messages/stream`,
+      {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          content,
+          ...(pageContext ? { page_context: pageContext } : {}),
+        }),
+      },
+    );
+
+    if (!res.ok || !res.body) {
+      throw new Error("Stream failed");
+    }
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+
+    const flush = (chunk: string) => {
+      buffer += chunk;
+      let idx: number;
+      // SSE events are separated by a blank line.
+      while ((idx = buffer.indexOf("\n\n")) !== -1) {
+        const raw = buffer.slice(0, idx);
+        buffer = buffer.slice(idx + 2);
+        for (const line of raw.split("\n")) {
+          const trimmed = line.trim();
+          if (!trimmed.startsWith("data:")) continue;
+          const payload = trimmed.slice(5).trim();
+          if (!payload) continue;
+          try {
+            onEvent(JSON.parse(payload) as AiStreamEvent);
+          } catch {
+            /* ignore malformed event */
+          }
+        }
+      }
+    };
+
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      flush(decoder.decode(value, { stream: true }));
+    }
+    // Flush any trailing buffered event without a terminating blank line.
+    if (buffer.trim()) {
+      flush("\n\n");
+    }
+  }
+
+  messageFeedback(messageId: string, feedback: "up" | "down") {
+    return this.request<AiMessage>(`/ai/messages/${messageId}/feedback`, {
+      method: "POST",
+      body: JSON.stringify({ feedback }),
+    });
+  }
+
+  regenerateAiMessage(conversationId: string) {
+    return this.request<AiConversationDetail>(
+      `/ai/conversations/${conversationId}/regenerate`,
+      { method: "POST" },
+    );
+  }
+
+  suggestedQuestions() {
+    return this.request<{ questions: string[] }>("/ai/suggested-questions");
+  }
+
+  dashboardInsights() {
+    return this.request<AiDashboardInsights>("/ai/insights/dashboard");
+  }
+
+  scanInsights(persist = false) {
+    return this.request<Record<string, unknown>>("/ai/insights/scan", {
+      method: "POST",
+      body: JSON.stringify({ persist }),
+    });
+  }
+
+  generateAiReport(body: {
+    report_type: string;
+    program_id?: string;
+    project_id?: string;
+    save_narrative?: boolean;
+  }) {
+    return this.request<AiReport>("/ai/reports/generate", {
+      method: "POST",
+      body: JSON.stringify(body),
+    });
+  }
+
+  async exportAiConversation(id: string): Promise<string> {
+    const headers = new Headers();
+    if (this.accessToken) headers.set("Authorization", `Bearer ${this.accessToken}`);
+    if (this.organizationId) headers.set("X-Organization-Id", this.organizationId);
+    const res = await fetch(`${API_V1}/ai/conversations/${id}/export`, {
+      headers,
+    });
+    if (!res.ok) throw new Error("Export failed");
+    return res.text();
   }
 
   listAiPredictions(params: { status?: string; severity?: string } = {}) {

@@ -12,7 +12,7 @@ T = TypeVar("T")
 
 
 class ORMModel(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
 
 
 class MessageResponse(BaseModel):
@@ -1463,13 +1463,17 @@ class AiConversationResponse(ORMModel):
     user_id: UUID
     title: str
     status: str
+    pinned: bool = False
+    share_token: Optional[str] = None
     context: dict = {}
+    metadata_: Optional[dict] = Field(default=None, serialization_alias="metadata")
     created_at: Any
     updated_at: Any
 
 
 class AiMessageCreateRequest(BaseModel):
     content: str = Field(min_length=1, max_length=20000)
+    page_context: Optional[dict[str, Any]] = None
 
 
 class AiMessageResponse(ORMModel):
@@ -1481,12 +1485,43 @@ class AiMessageResponse(ORMModel):
     model: Optional[str] = None
     provider: str
     token_count: Optional[int] = None
+    metadata_: Optional[dict] = Field(default=None, serialization_alias="metadata")
     created_at: Any
     updated_at: Any
 
 
 class AiConversationDetailResponse(AiConversationResponse):
     messages: list[AiMessageResponse] = []
+
+
+class AiConversationUpdateRequest(BaseModel):
+    title: Optional[str] = Field(default=None, max_length=255)
+    pinned: Optional[bool] = None
+
+
+class AiMessageFeedbackRequest(BaseModel):
+    feedback: str = Field(pattern="^(up|down)$")
+
+
+class AiInsightsScanRequest(BaseModel):
+    persist: bool = False
+
+
+class AiReportGenerateRequest(BaseModel):
+    report_type: str = Field(default="monthly", max_length=64)
+    program_id: Optional[UUID] = None
+    project_id: Optional[UUID] = None
+    save_narrative: bool = False
+
+
+class AiReportResponse(BaseModel):
+    report_type: str
+    title: str
+    content: str
+    provider: str
+    model: Optional[str] = None
+    generated_at: str
+    narrative_id: Optional[str] = None
 
 
 class AiPredictionGenerateRequest(BaseModel):

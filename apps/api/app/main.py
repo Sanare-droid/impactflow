@@ -20,7 +20,7 @@ from app.services.rate_limit import get_redis
 
 logger = logging.getLogger(__name__)
 
-API_VERSION = "0.13.0"
+API_VERSION = "0.14.0"
 
 
 async def _jobs_loop(stop: asyncio.Event) -> None:

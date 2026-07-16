@@ -3,7 +3,10 @@ from __future__ import annotations
 from typing import Annotated, Optional
 from uuid import UUID
 
+import json
+
 from fastapi import APIRouter, Depends, Query, Request
+from fastapi.responses import PlainTextResponse, StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import RequestContext, client_meta, require_permissions
@@ -13,7 +16,10 @@ from app.schemas import (
     AiConversationCreateRequest,
     AiConversationDetailResponse,
     AiConversationResponse,
+    AiConversationUpdateRequest,
+    AiInsightsScanRequest,
     AiMessageCreateRequest,
+    AiMessageFeedbackRequest,
     AiMessageResponse,
     AiNarrativeCreateRequest,
     AiNarrativeResponse,
@@ -21,6 +27,8 @@ from app.schemas import (
     AiPredictionGenerateRequest,
     AiPredictionResponse,
     AiPredictionUpdateRequest,
+    AiReportGenerateRequest,
+    AiReportResponse,
     KnowledgeCreateRequest,
     KnowledgeResponse,
     KnowledgeUpdateRequest,
@@ -29,6 +37,7 @@ from app.schemas import (
     PaginationMeta,
 )
 from app.services import ai as ai_service
+from app.services import ai_orchestrator
 from app.services.rate_limit import enforce_rate_limit
 
 router = APIRouter(tags=["AI Copilot"])
@@ -59,10 +68,11 @@ async def list_conversations(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     status: Optional[str] = None,
+    pinned: Optional[bool] = None,
 ) -> PaginatedResponse[AiConversationResponse]:
     org_id = _require_org(ctx)
     items, total = await ai_service.list_conversations(
-        db, org_id, ctx.user.id, page=page, page_size=page_size, status=status
+        db, org_id, ctx.user.id, page=page, page_size=page_size, status=status, pinned=pinned
     )
     return PaginatedResponse(
         items=[AiConversationResponse.model_validate(i) for i in items],
@@ -128,6 +138,8 @@ async def send_message(
         user_id=ctx.user.id,
         conversation_id=conversation_id,
         content=body.content,
+        permissions=ctx.permissions,
+        page_context=body.page_context,
         ip=ip,
         user_agent=ua,
     )
@@ -135,6 +147,214 @@ async def send_message(
     return AiConversationDetailResponse(
         **AiConversationResponse.model_validate(conv).model_dump(),
         messages=[AiMessageResponse.model_validate(m) for m in conv.messages],
+    )
+
+
+@router.post("/ai/conversations/{conversation_id}/messages/stream")
+async def stream_message(
+    conversation_id: UUID,
+    body: AiMessageCreateRequest,
+    request: Request,
+    ctx: Annotated[RequestContext, Depends(require_permissions("ai:use"))],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> StreamingResponse:
+    org_id = _require_org(ctx)
+    ip, ua = client_meta(request)
+    await enforce_rate_limit(key=f"rl:ai:msg:{org_id}:{ip}", limit=30, window_seconds=60)
+
+    async def _event_source():
+        async for event in ai_orchestrator.run_turn_stream(
+            db,
+            organization_id=org_id,
+            user_id=ctx.user.id,
+            conversation_id=conversation_id,
+            content=body.content,
+            permissions=ctx.permissions,
+            page_context=body.page_context,
+            ip=ip,
+            user_agent=ua,
+        ):
+            yield f"data: {json.dumps(event, default=str)}\n\n"
+
+    return StreamingResponse(_event_source(), media_type="text/event-stream")
+
+
+@router.patch("/ai/conversations/{conversation_id}", response_model=AiConversationResponse)
+async def update_conversation(
+    conversation_id: UUID,
+    body: AiConversationUpdateRequest,
+    request: Request,
+    ctx: Annotated[RequestContext, Depends(require_permissions("ai:use"))],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> AiConversationResponse:
+    org_id = _require_org(ctx)
+    ip, ua = client_meta(request)
+    conv = await ai_service.update_conversation(
+        db,
+        organization_id=org_id,
+        user_id=ctx.user.id,
+        conversation_id=conversation_id,
+        title=body.title,
+        pinned=body.pinned,
+        ip=ip,
+        user_agent=ua,
+    )
+    return AiConversationResponse.model_validate(conv)
+
+
+@router.post("/ai/conversations/{conversation_id}/share")
+async def share_conversation(
+    conversation_id: UUID,
+    request: Request,
+    ctx: Annotated[RequestContext, Depends(require_permissions("ai:use"))],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> dict:
+    org_id = _require_org(ctx)
+    ip, ua = client_meta(request)
+    conv = await ai_service.share_conversation(
+        db,
+        organization_id=org_id,
+        user_id=ctx.user.id,
+        conversation_id=conversation_id,
+        ip=ip,
+        user_agent=ua,
+    )
+    return {
+        "share_token": conv.share_token,
+        "url_path": f"/app/copilot?share={conv.share_token}",
+    }
+
+
+@router.post("/ai/messages/{message_id}/feedback", response_model=AiMessageResponse)
+async def message_feedback(
+    message_id: UUID,
+    body: AiMessageFeedbackRequest,
+    ctx: Annotated[RequestContext, Depends(require_permissions("ai:use"))],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> AiMessageResponse:
+    org_id = _require_org(ctx)
+    msg = await ai_service.set_message_feedback(
+        db,
+        organization_id=org_id,
+        user_id=ctx.user.id,
+        message_id=message_id,
+        feedback=body.feedback,
+    )
+    return AiMessageResponse.model_validate(msg)
+
+
+@router.get("/ai/conversations/{conversation_id}/export", response_class=PlainTextResponse)
+async def export_conversation(
+    conversation_id: UUID,
+    ctx: Annotated[RequestContext, Depends(require_permissions("ai:use"))],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> PlainTextResponse:
+    org_id = _require_org(ctx)
+    conv = await ai_service.get_conversation(db, org_id, ctx.user.id, conversation_id)
+    markdown = ai_orchestrator.export_conversation_markdown(conv)
+    return PlainTextResponse(markdown, media_type="text/markdown")
+
+
+@router.post("/ai/conversations/{conversation_id}/regenerate", response_model=AiConversationDetailResponse)
+async def regenerate_message(
+    conversation_id: UUID,
+    request: Request,
+    ctx: Annotated[RequestContext, Depends(require_permissions("ai:use"))],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> AiConversationDetailResponse:
+    org_id = _require_org(ctx)
+    ip, ua = client_meta(request)
+    await enforce_rate_limit(key=f"rl:ai:msg:{org_id}:{ip}", limit=30, window_seconds=60)
+    conv, _user_msg, _assistant, _citations = await ai_orchestrator.regenerate_turn(
+        db,
+        organization_id=org_id,
+        user_id=ctx.user.id,
+        conversation_id=conversation_id,
+        permissions=ctx.permissions,
+        ip=ip,
+        user_agent=ua,
+    )
+    conv = await ai_service.get_conversation(db, org_id, ctx.user.id, conversation_id)
+    return AiConversationDetailResponse(
+        **AiConversationResponse.model_validate(conv).model_dump(),
+        messages=[AiMessageResponse.model_validate(m) for m in conv.messages],
+    )
+
+
+@router.get("/ai/suggested-questions")
+async def suggested_questions(
+    ctx: Annotated[RequestContext, Depends(require_permissions("ai:use"))],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> dict:
+    org_id = _require_org(ctx)
+    questions = await ai_service.suggested_questions(db, org_id)
+    return {"questions": questions}
+
+
+@router.get("/ai/insights/dashboard")
+async def dashboard_insights(
+    ctx: Annotated[
+        RequestContext, Depends(require_permissions("dashboard:read", "ai:use"))
+    ],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> dict:
+    org_id = _require_org(ctx)
+    return await ai_service.dashboard_insights(db, org_id)
+
+
+@router.post("/ai/insights/scan")
+async def scan_insights(
+    body: AiInsightsScanRequest,
+    request: Request,
+    ctx: Annotated[
+        RequestContext, Depends(require_permissions("predictions:read", "ai:use"))
+    ],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> dict:
+    org_id = _require_org(ctx)
+    ip, ua = client_meta(request)
+    return await ai_service.scan_and_persist_predictions(
+        db,
+        organization_id=org_id,
+        actor_id=ctx.user.id,
+        persist=body.persist,
+        ip=ip,
+        user_agent=ua,
+    )
+
+
+@router.post("/ai/reports/generate", response_model=AiReportResponse)
+async def generate_report(
+    body: AiReportGenerateRequest,
+    request: Request,
+    ctx: Annotated[
+        RequestContext, Depends(require_permissions("reports:read", "ai:use"))
+    ],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> AiReportResponse:
+    org_id = _require_org(ctx)
+    ip, ua = client_meta(request)
+    await enforce_rate_limit(key=f"rl:ai:report:{org_id}:{ip}", limit=20, window_seconds=60)
+    report = await ai_service.generate_report(
+        db,
+        organization_id=org_id,
+        actor_id=ctx.user.id,
+        report_type=body.report_type,
+        program_id=body.program_id,
+        project_id=body.project_id,
+        permissions=ctx.permissions,
+        save_narrative=body.save_narrative,
+        ip=ip,
+        user_agent=ua,
+    )
+    return AiReportResponse(
+        report_type=report["report_type"],
+        title=report["title"],
+        content=report["content"],
+        provider=report["provider"],
+        model=report.get("model"),
+        generated_at=report["generated_at"],
+        narrative_id=report.get("narrative_id"),
     )
 
 

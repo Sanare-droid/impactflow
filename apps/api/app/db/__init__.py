@@ -2,7 +2,7 @@
 
 from app.db.base import Base
 from app.models.activity import Activity
-from app.models.ai import AiConversation, AiMessage
+from app.models.ai import AiConversation, AiMessage, AiRequestLog
 from app.models.audit import AuditLog
 from app.models.beneficiary import Beneficiary, BeneficiaryMembership
 from app.models.budget import Budget, BudgetLine
@@ -87,6 +87,7 @@ __all__ = [
     "EvidenceItem",
     "AiConversation",
     "AiMessage",
+    "AiRequestLog",
     "AiPrediction",
     "AiNarrative",
     "KnowledgeDocument",
