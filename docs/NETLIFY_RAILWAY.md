@@ -78,6 +78,8 @@ python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().d
 | `SUPERADMIN_EMAIL` | optional — platform superadmin email (created/updated on every boot) |
 | `SUPERADMIN_PASSWORD` | optional — 8+ chars, mixed case + digit; pairs with SUPERADMIN_EMAIL |
 | `OPENAI_API_KEY` | optional |
+| `RESEND_API_KEY` | Resend API key (`re_…`) — preferred email provider |
+| `SMTP_FROM` | Sender, e.g. `ImpactFlow <noreply@yourdomain.com>` (or `onboarding@resend.dev` while testing) |
 
 Netlify deploy URLs (`*.netlify.app`) are also allowed via `BACKEND_CORS_ORIGIN_REGEX` by default.
 

@@ -74,7 +74,8 @@ class Settings(BaseSettings):
     openai_api_key: str = ""
     openai_model: str = "gpt-4o"
 
-    # Email (optional SMTP — falls back to log stub)
+    # Email — Resend API preferred; SMTP fallback; else log stub
+    resend_api_key: str = ""
     smtp_host: str = ""
     smtp_port: int = 587
     smtp_user: str = ""
@@ -90,6 +91,14 @@ class Settings(BaseSettings):
     password_min_length: int = 8
     max_login_attempts: int = 5
     lockout_minutes: int = 15
+
+    @property
+    def email_from(self) -> str:
+        return (
+            (self.smtp_from or "").strip()
+            or (self.smtp_user or "").strip()
+            or "ImpactFlow <onboarding@resend.dev>"
+        )
 
     @field_validator("backend_cors_origins", mode="before")
     @classmethod
