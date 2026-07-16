@@ -52,6 +52,58 @@ export type Household = {
   updated_at?: string;
 };
 
+export type SurveyFieldOption = { value: string; label: string };
+
+export type SurveyField = {
+  id: string;
+  type: string;
+  label: string;
+  required?: boolean;
+  options?: SurveyFieldOption[];
+  [key: string]: unknown;
+};
+
+export type Survey = {
+  id: string;
+  organization_id?: string;
+  name: string;
+  code: string;
+  description?: string | null;
+  category?: string | null;
+  status: string;
+  current_version: number;
+  updated_at?: string;
+};
+
+export type SurveyVersion = {
+  id: string;
+  survey_id: string;
+  version: number;
+  title: string;
+  schema: { fields?: SurveyField[]; pages?: unknown[]; [key: string]: unknown };
+  published_at?: string | null;
+  created_at?: string;
+};
+
+export type SurveyDetail = {
+  survey: Survey;
+  version: SurveyVersion;
+};
+
+export type SurveySubmission = {
+  id: string;
+  survey_id: string;
+  survey_version_id: string;
+  version: number;
+  status: string;
+  answers: Record<string, unknown>;
+  respondent_name?: string | null;
+  beneficiary_id?: string | null;
+  client_mutation_id?: string | null;
+  created_at?: string;
+  updated_at?: string;
+};
+
 type Paginated<T> = { items: T[]; meta: { total: number; page: number; page_size: number } };
 
 class FieldApi {
@@ -189,6 +241,37 @@ class FieldApi {
       method: "POST",
       body: JSON.stringify(body),
     });
+  }
+
+  listSurveys(params: { status?: string; page?: number; updated_after?: string } = {}) {
+    const q = new URLSearchParams();
+    q.set("page", String(params.page ?? 1));
+    q.set("page_size", "100");
+    if (params.status) q.set("status", params.status);
+    if (params.updated_after) q.set("updated_after", params.updated_after);
+    return this.request<Paginated<Survey>>(`/surveys?${q}`);
+  }
+
+  getSurvey(id: string) {
+    return this.request<SurveyDetail>(`/surveys/${id}`);
+  }
+
+  submitSurveyResponse(id: string, body: Record<string, unknown>) {
+    return this.request<SurveySubmission>(`/surveys/${id}/responses`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    });
+  }
+
+  listSurveyResponses(
+    params: { survey_id?: string; page?: number; updated_after?: string } = {},
+  ) {
+    const q = new URLSearchParams();
+    q.set("page", String(params.page ?? 1));
+    q.set("page_size", "100");
+    if (params.survey_id) q.set("survey_id", params.survey_id);
+    if (params.updated_after) q.set("updated_after", params.updated_after);
+    return this.request<Paginated<SurveySubmission>>(`/survey-responses?${q}`);
   }
 }
 

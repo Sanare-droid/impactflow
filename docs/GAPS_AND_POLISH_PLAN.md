@@ -175,8 +175,8 @@ flowchart LR
 
 ---
 
-## Inventory notes (as of Track E / API 0.12)
+## Inventory notes (as of Epic 1 / API 0.13)
 
-**Exists:** Full A–D stack plus surveys, knowledge chunk RAG, indicator progress, evidence verify, budget burn alerts, report Markdown export, white-label login branding, grouped sidebar.
+**Exists:** Full A–E stack plus Epic 1 dynamic forms engine (schema v2 builder, assignments, analytics, CSV/Excel/HTML export, mobile offline survey sync).
 
-**Deferred:** Kobo/ODK import, pgvector column type, OAuth integrations, first-run checklist / skeletons / full a11y pass.
+**Deferred:** Kobo/ODK import, native PDF binary, binary media object storage, pgvector column type, OAuth integrations, `@dnd-kit` drag reorder.

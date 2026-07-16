@@ -4,6 +4,8 @@ import type {
   LocalBeneficiary,
   LocalCommunity,
   LocalHousehold,
+  LocalSurvey,
+  LocalSurveyResponse,
   MutationRow,
   SyncStatus,
 } from "@/lib/db/types";
@@ -267,6 +269,217 @@ export async function upsertServerHousehold(remote: {
   }
 }
 
+// -------- Surveys (server-wins, v1 conflict policy — see docstring below) --------
+
+/**
+ * Conflict policy (v1): surveys are read-only on the device, so pulled
+ * versions always overwrite the local cache — server wins unconditionally.
+ * Survey *responses* are append-only from the device (create only), so there
+ * is nothing to reconcile there either; retries are deduped server-side by
+ * `client_mutation_id`.
+ */
+export async function upsertServerSurvey(remote: {
+  id: string;
+  organization_id?: string;
+  name: string;
+  code?: string | null;
+  category?: string | null;
+  status: string;
+  current_version: number;
+  updated_at?: string;
+  version?: {
+    id: string;
+    survey_id: string;
+    version: number;
+    title: string;
+    schema: Record<string, unknown>;
+    published_at?: string | null;
+    created_at?: string;
+  } | null;
+}): Promise<void> {
+  const db = await getDb();
+  const existing = await db.getFirstAsync<LocalSurvey>(
+    "SELECT * FROM surveys WHERE server_id = ?",
+    [remote.id],
+  );
+  const updated_at_local = nowIso();
+  const payload = JSON.stringify(remote);
+  // Preserve the previously cached schema if this pull didn't include one
+  // (e.g. the schema fetch failed) so an offline form doesn't go blank.
+  const schemaJson = remote.version
+    ? JSON.stringify(remote.version.schema ?? {})
+    : existing?.schema_json ?? "{}";
+  if (existing) {
+    await db.runAsync(
+      `UPDATE surveys SET name = ?, code = ?, category = ?, status = ?,
+        current_version = ?, payload_json = ?, schema_json = ?,
+        sync_status = 'synced', last_error = NULL, updated_at_local = ?,
+        updated_at_server = ?, organization_id = COALESCE(organization_id, ?)
+       WHERE local_id = ?`,
+      [
+        remote.name,
+        remote.code ?? null,
+        remote.category ?? null,
+        remote.status,
+        remote.current_version,
+        payload,
+        schemaJson,
+        updated_at_local,
+        remote.updated_at ?? null,
+        remote.organization_id ?? null,
+        existing.local_id,
+      ],
+    );
+  } else {
+    await db.runAsync(
+      `INSERT INTO surveys (
+        local_id, server_id, organization_id, name, code, category, status,
+        current_version, payload_json, schema_json, sync_status, last_error,
+        updated_at_local, updated_at_server
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'synced', NULL, ?, ?)`,
+      [
+        newLocalId(),
+        remote.id,
+        remote.organization_id ?? null,
+        remote.name,
+        remote.code ?? null,
+        remote.category ?? null,
+        remote.status,
+        remote.current_version,
+        payload,
+        schemaJson,
+        updated_at_local,
+        remote.updated_at ?? null,
+      ],
+    );
+  }
+}
+
+export async function listLocalSurveys(): Promise<LocalSurvey[]> {
+  const db = await getDb();
+  return db.getAllAsync<LocalSurvey>(
+    "SELECT * FROM surveys WHERE status = 'published' ORDER BY name ASC",
+  );
+}
+
+export async function getLocalSurvey(local_id: string): Promise<LocalSurvey | null> {
+  const db = await getDb();
+  return (
+    (await db.getFirstAsync<LocalSurvey>("SELECT * FROM surveys WHERE local_id = ?", [
+      local_id,
+    ])) ?? null
+  );
+}
+
+export async function createLocalSurveyResponse(input: {
+  survey_local_id: string;
+  survey_server_id: string | null;
+  organization_id?: string | null;
+  beneficiary_local_id?: string | null;
+  beneficiary_server_id?: string | null;
+  status: "draft" | "submitted";
+  answers: Record<string, unknown>;
+}): Promise<LocalSurveyResponse> {
+  const db = await getDb();
+  const local_id = newLocalId();
+  const client_mutation_id = newLocalId();
+  const updated_at_local = nowIso();
+  const answersJson = JSON.stringify(input.answers);
+  await db.runAsync(
+    `INSERT INTO survey_responses (
+      local_id, server_id, survey_local_id, survey_server_id, organization_id,
+      beneficiary_local_id, beneficiary_server_id, status, answers_json,
+      client_mutation_id, payload_json, sync_status, last_error,
+      updated_at_local, updated_at_server
+    ) VALUES (?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, '{}', 'pending', NULL, ?, NULL)`,
+    [
+      local_id,
+      input.survey_local_id,
+      input.survey_server_id ?? null,
+      input.organization_id ?? null,
+      input.beneficiary_local_id ?? null,
+      input.beneficiary_server_id ?? null,
+      input.status,
+      answersJson,
+      client_mutation_id,
+      updated_at_local,
+    ],
+  );
+  if (input.status === "submitted") {
+    await enqueueMutation({
+      entity_type: "survey_response",
+      local_id,
+      op: "create",
+      payload: {
+        survey_id: input.survey_server_id,
+        answers: input.answers,
+        status: "submitted",
+        beneficiary_id: input.beneficiary_server_id ?? undefined,
+        client_mutation_id,
+      },
+    });
+  }
+  const row = await db.getFirstAsync<LocalSurveyResponse>(
+    "SELECT * FROM survey_responses WHERE local_id = ?",
+    [local_id],
+  );
+  if (!row) throw new Error("Failed to create local survey response");
+  return row;
+}
+
+export async function listLocalSurveyResponses(
+  survey_local_id?: string,
+): Promise<LocalSurveyResponse[]> {
+  const db = await getDb();
+  if (survey_local_id) {
+    return db.getAllAsync<LocalSurveyResponse>(
+      "SELECT * FROM survey_responses WHERE survey_local_id = ? ORDER BY updated_at_local DESC",
+      [survey_local_id],
+    );
+  }
+  return db.getAllAsync<LocalSurveyResponse>(
+    "SELECT * FROM survey_responses ORDER BY updated_at_local DESC",
+  );
+}
+
+export async function listPendingSurveyResponses(): Promise<LocalSurveyResponse[]> {
+  const db = await getDb();
+  return db.getAllAsync<LocalSurveyResponse>(
+    "SELECT * FROM survey_responses WHERE sync_status IN ('pending', 'failed') AND status = 'submitted'",
+  );
+}
+
+export async function markSurveyResponseSynced(
+  local_id: string,
+  server: { id: string; survey_id?: string; updated_at?: string },
+): Promise<void> {
+  const db = await getDb();
+  await db.runAsync(
+    `UPDATE survey_responses SET server_id = ?, survey_server_id = COALESCE(?, survey_server_id),
+      sync_status = 'synced', last_error = NULL, updated_at_server = ?,
+      updated_at_local = ? WHERE local_id = ?`,
+    [server.id, server.survey_id ?? null, server.updated_at ?? null, nowIso(), local_id],
+  );
+}
+
+export async function markSurveyResponseFailed(local_id: string, error: string): Promise<void> {
+  const db = await getDb();
+  await db.runAsync(
+    `UPDATE survey_responses SET sync_status = 'failed', last_error = ?, updated_at_local = ? WHERE local_id = ?`,
+    [error.slice(0, 500), nowIso(), local_id],
+  );
+}
+
+export async function getSurveyResponse(local_id: string): Promise<LocalSurveyResponse | null> {
+  const db = await getDb();
+  return (
+    (await db.getFirstAsync<LocalSurveyResponse>(
+      "SELECT * FROM survey_responses WHERE local_id = ?",
+      [local_id],
+    )) ?? null
+  );
+}
+
 export async function enqueueMutation(input: {
   entity_type: MutationRow["entity_type"];
   local_id: string;
@@ -297,7 +510,12 @@ export async function listPendingMutations(): Promise<MutationRow[]> {
     `SELECT * FROM mutation_queue
      WHERE status IN ('pending', 'failed')
      ORDER BY
-       CASE entity_type WHEN 'community' THEN 0 WHEN 'household' THEN 1 ELSE 2 END,
+       CASE entity_type
+         WHEN 'community' THEN 0
+         WHEN 'household' THEN 1
+         WHEN 'beneficiary' THEN 2
+         ELSE 3
+       END,
        created_at ASC`,
   );
 }
@@ -333,6 +551,9 @@ export async function retryFailedMutations(): Promise<number> {
   );
   await db.runAsync(
     `UPDATE households SET sync_status = 'pending', last_error = NULL WHERE sync_status = 'failed'`,
+  );
+  await db.runAsync(
+    `UPDATE survey_responses SET sync_status = 'pending', last_error = NULL WHERE sync_status = 'failed'`,
   );
   return result.changes;
 }

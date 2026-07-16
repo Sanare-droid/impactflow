@@ -718,40 +718,163 @@ export type NotificationItem = {
   updated_at: string;
 };
 
+export type SurveyFieldOption = { value: string; label: string };
+
+export type SurveyFieldValidation = {
+  min?: number;
+  max?: number;
+  min_length?: number;
+  max_length?: number;
+  regex?: string;
+};
+
+export type SurveyShowIf = {
+  field: string;
+  op: "eq" | "neq" | "in" | "not_in" | "truthy" | "falsy";
+  value?: unknown;
+};
+
+export type SurveyFieldLogic = {
+  show_if?: SurveyShowIf;
+};
+
+export type SurveyFieldCalculate = {
+  op: "sum";
+  fields: string[];
+};
+
+export type SurveyField = {
+  id: string;
+  type: string;
+  label: string;
+  required?: boolean;
+  hidden?: boolean;
+  read_only?: boolean;
+  placeholder?: string;
+  help_text?: string;
+  options?: SurveyFieldOption[];
+  validation?: SurveyFieldValidation;
+  default?: unknown;
+  logic?: SurveyFieldLogic;
+  calculate?: SurveyFieldCalculate;
+  [key: string]: unknown;
+};
+
+export type SurveySection = {
+  id: string;
+  title?: string;
+  fields: SurveyField[];
+};
+
+export type SurveyPage = {
+  id: string;
+  title?: string;
+  sections: SurveySection[];
+};
+
+export type SurveySchemaSettings = {
+  progress_bar?: boolean;
+  allow_draft?: boolean;
+  auto_save?: boolean;
+  randomize_questions?: boolean;
+  anonymous?: boolean;
+  [key: string]: unknown;
+};
+
+export type SurveySchema = {
+  schema_version?: number;
+  settings?: SurveySchemaSettings;
+  pages?: SurveyPage[];
+  /** Legacy flat field list — either the authoring format (no pages) or a
+   * flattened convenience copy the API appends alongside `pages`. */
+  fields?: SurveyField[];
+};
+
+export type FieldTypeInfo = { code: string; label: string; category: string };
+
 export type Survey = {
   id: string;
   organization_id: string;
   name: string;
   code: string;
   description?: string | null;
+  category?: string | null;
   status: string;
   current_version: number;
+  program_id?: string | null;
+  project_id?: string | null;
+  activity_id?: string | null;
+  is_anonymous: boolean;
+  response_limit?: number | null;
+  starts_at?: string | null;
+  ends_at?: string | null;
+  cloned_from_id?: string | null;
+  created_by_id?: string | null;
   created_at: string;
   updated_at: string;
 };
 
+export type SurveyVersionDetail = {
+  id: string;
+  survey_id: string;
+  version: number;
+  title: string;
+  schema: SurveySchema;
+  changelog?: string | null;
+  published_at?: string | null;
+  created_at: string;
+};
+
 export type SurveyDetail = {
   survey: Survey;
-  version: {
-    id: string;
-    survey_id: string;
-    version: number;
-    title: string;
-    schema: { fields?: Array<Record<string, unknown>> };
-    published_at?: string | null;
-    created_at: string;
-  };
+  version: SurveyVersionDetail;
+};
+
+export type SurveyAssignment = {
+  id: string;
+  organization_id: string;
+  survey_id: string;
+  target_type: string;
+  target_id: string;
+  status: string;
+  due_at?: string | null;
+  assigned_by_id?: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type SurveyAnalytics = {
+  survey_id: string;
+  total_responses: number;
+  status_counts: Record<string, number>;
+  field_histograms: Record<
+    string,
+    { label: string; type: string; counts: Record<string, number> }
+  >;
 };
 
 export type SurveySubmission = {
   id: string;
+  organization_id: string;
   survey_id: string;
   survey_version_id: string;
   version: number;
   status: string;
   answers: Record<string, unknown>;
   respondent_name?: string | null;
+  beneficiary_id?: string | null;
+  community_id?: string | null;
+  household_id?: string | null;
+  program_id?: string | null;
+  project_id?: string | null;
+  activity_id?: string | null;
+  assignment_id?: string | null;
+  client_mutation_id?: string | null;
+  location?: Record<string, unknown> | null;
+  submitted_at?: string | null;
+  submitted_by_id?: string | null;
   created_at: string;
+  updated_at: string;
 };
 
 export type PublicBranding = {
@@ -1560,9 +1683,21 @@ class ApiClient {
     });
   }
 
-  listSurveys(params: { status?: string } = {}) {
+  listSurveys(
+    params: {
+      status?: string;
+      category?: string;
+      program_id?: string;
+      project_id?: string;
+      search?: string;
+    } = {},
+  ) {
     const q = new URLSearchParams({ page_size: "100" });
     if (params.status) q.set("status", params.status);
+    if (params.category) q.set("category", params.category);
+    if (params.program_id) q.set("program_id", params.program_id);
+    if (params.project_id) q.set("project_id", params.project_id);
+    if (params.search) q.set("search", params.search);
     return this.request<Paginated<Survey>>(`/surveys?${q}`);
   }
 
@@ -1584,6 +1719,59 @@ class ApiClient {
     });
   }
 
+  cloneSurvey(id: string) {
+    return this.request<Survey>(`/surveys/${id}/clone`, { method: "POST" });
+  }
+
+  archiveSurvey(id: string) {
+    return this.request<Survey>(`/surveys/${id}/archive`, { method: "POST" });
+  }
+
+  listFieldTypes() {
+    return this.request<FieldTypeInfo[]>("/surveys/field-types");
+  }
+
+  listSurveyVersions(id: string) {
+    return this.request<SurveyVersionDetail[]>(`/surveys/${id}/versions`);
+  }
+
+  getSurveyVersion(id: string, version: number) {
+    return this.request<SurveyVersionDetail>(`/surveys/${id}/versions/${version}`);
+  }
+
+  exportSurveySchema(id: string) {
+    return this.request<{
+      name: string;
+      code: string;
+      category?: string | null;
+      schema: SurveySchema;
+    }>(`/surveys/${id}/export-schema`);
+  }
+
+  importSurveySchema(id: string, schema: SurveySchema, changelog?: string) {
+    return this.request<SurveyDetail>(`/surveys/${id}/import-schema`, {
+      method: "POST",
+      body: JSON.stringify({ schema, changelog }),
+    });
+  }
+
+  listAssignments(surveyId: string) {
+    return this.request<SurveyAssignment[]>(`/surveys/${surveyId}/assignments`);
+  }
+
+  createAssignment(surveyId: string, body: Record<string, unknown>) {
+    return this.request<SurveyAssignment>(`/surveys/${surveyId}/assignments`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    });
+  }
+
+  deleteAssignment(surveyId: string, assignmentId: string) {
+    return this.request<void>(`/surveys/${surveyId}/assignments/${assignmentId}`, {
+      method: "DELETE",
+    });
+  }
+
   submitSurveyResponse(id: string, body: Record<string, unknown>) {
     return this.request<SurveySubmission>(`/surveys/${id}/responses`, {
       method: "POST",
@@ -1591,10 +1779,43 @@ class ApiClient {
     });
   }
 
-  listSurveyResponses(params: { survey_id?: string } = {}) {
-    const q = new URLSearchParams({ page_size: "50" });
+  updateSurveyResponse(id: string, body: Record<string, unknown>) {
+    return this.request<SurveySubmission>(`/survey-responses/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    });
+  }
+
+  listSurveyResponses(
+    params: { survey_id?: string; status?: string; page?: number; page_size?: number } = {},
+  ) {
+    const q = new URLSearchParams({ page_size: String(params.page_size ?? 50) });
     if (params.survey_id) q.set("survey_id", params.survey_id);
+    if (params.status) q.set("status", params.status);
+    if (params.page) q.set("page", String(params.page));
     return this.request<Paginated<SurveySubmission>>(`/survey-responses?${q}`);
+  }
+
+  getSurveyAnalytics(id: string) {
+    return this.request<SurveyAnalytics>(`/surveys/${id}/analytics`);
+  }
+
+  async exportSurveyResponses(
+    id: string,
+    format: "csv" | "html" | "xlsx" = "csv",
+  ): Promise<string> {
+    const headers = new Headers();
+    if (this.accessToken) headers.set("Authorization", `Bearer ${this.accessToken}`);
+    if (this.organizationId) headers.set("X-Organization-Id", this.organizationId);
+    const res = await fetch(`${API_V1}/surveys/${id}/export?format=${format}`, {
+      headers,
+    });
+    if (!res.ok) throw new Error("Export failed");
+    return res.text();
+  }
+
+  async exportSurveyResponsesCsv(id: string): Promise<string> {
+    return this.exportSurveyResponses(id, "csv");
   }
 
   getPublicBranding(slug: string) {

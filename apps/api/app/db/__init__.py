@@ -34,7 +34,14 @@ from app.models.refresh_token import RefreshToken
 from app.models.report import Report
 from app.models.role import Role
 from app.models.saved_dashboard import SavedDashboard
-from app.models.survey import Survey, SurveyResponse, SurveyVersion
+from app.models.survey import (
+    Survey,
+    SurveyAnswer,
+    SurveyAssignment,
+    SurveyResponse,
+    SurveyResponseAttachment,
+    SurveyVersion,
+)
 from app.models.task import Task
 from app.models.theory_of_change import TheoryOfChange
 from app.models.user import User
@@ -93,5 +100,8 @@ __all__ = [
     "WebhookDelivery",
     "Survey",
     "SurveyVersion",
+    "SurveyAssignment",
     "SurveyResponse",
+    "SurveyAnswer",
+    "SurveyResponseAttachment",
 ]

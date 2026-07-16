@@ -52,9 +52,44 @@ export type LocalHousehold = {
   updated_at_server: string | null;
 };
 
+export type LocalSurvey = {
+  local_id: string;
+  server_id: string | null;
+  organization_id: string | null;
+  name: string;
+  code: string | null;
+  category: string | null;
+  status: string;
+  current_version: number;
+  payload_json: string;
+  schema_json: string;
+  sync_status: SyncStatus;
+  last_error: string | null;
+  updated_at_local: string;
+  updated_at_server: string | null;
+};
+
+export type LocalSurveyResponse = {
+  local_id: string;
+  server_id: string | null;
+  survey_local_id: string | null;
+  survey_server_id: string | null;
+  organization_id: string | null;
+  beneficiary_local_id: string | null;
+  beneficiary_server_id: string | null;
+  status: "draft" | "submitted";
+  answers_json: string;
+  client_mutation_id: string;
+  payload_json: string;
+  sync_status: SyncStatus;
+  last_error: string | null;
+  updated_at_local: string;
+  updated_at_server: string | null;
+};
+
 export type MutationRow = {
   id: string;
-  entity_type: "community" | "household" | "beneficiary";
+  entity_type: "community" | "household" | "beneficiary" | "survey_response";
   local_id: string;
   op: "create" | "update" | "delete";
   payload_json: string;

@@ -30,7 +30,7 @@ _ALL_READ = [
 _ALL_WRITE = [
     p["code"]
     for p in PERMISSION_CATALOG
-    if p["action"] in ("manage", "create", "update", "delete", "approve")
+    if p["action"] in ("manage", "create", "update", "delete", "approve", "submit")
 ]
 
 

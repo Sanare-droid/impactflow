@@ -59,6 +59,16 @@ async function pushQueue(): Promise<{ pushed: number; failed: number }> {
         await api.createCommunity(payload);
       } else if (mut.entity_type === "household" && mut.op === "create") {
         await api.createHousehold(payload);
+      } else if (mut.entity_type === "survey_response" && mut.op === "create") {
+        const surveyId = payload.survey_id as string | undefined;
+        if (!surveyId) throw new Error("Survey has not synced yet — try again once online");
+        const { survey_id: _drop, ...body } = payload;
+        const created = await api.submitSurveyResponse(surveyId, body);
+        await repo.markSurveyResponseSynced(mut.local_id, {
+          id: created.id,
+          survey_id: created.survey_id,
+          updated_at: created.updated_at,
+        });
       } else {
         throw new Error(`Unsupported mutation ${mut.entity_type}:${mut.op}`);
       }
@@ -69,6 +79,8 @@ async function pushQueue(): Promise<{ pushed: number; failed: number }> {
       await repo.markMutationFailed(mut.id, message);
       if (mut.entity_type === "beneficiary") {
         await repo.markBeneficiaryFailed(mut.local_id, message);
+      } else if (mut.entity_type === "survey_response") {
+        await repo.markSurveyResponseFailed(mut.local_id, message);
       }
       failed += 1;
     }
@@ -104,6 +116,22 @@ async function pullDeltas(): Promise<number> {
   );
   for (const b of beneficiaries) {
     await repo.upsertServerBeneficiary(b);
+    pulled += 1;
+  }
+
+  // Surveys: fetch published forms + their current schema so capture works offline.
+  const surveys = await pullAllPages(
+    (page, updated_after) => api.listSurveys({ page, updated_after, status: "published" }),
+    last,
+  );
+  for (const s of surveys) {
+    try {
+      const detail = await api.getSurvey(s.id);
+      await repo.upsertServerSurvey({ ...detail.survey, version: detail.version });
+    } catch {
+      // Schema fetch failed (e.g. permission change); keep prior cached copy.
+      await repo.upsertServerSurvey({ ...s, version: null });
+    }
     pulled += 1;
   }
 

@@ -139,11 +139,18 @@ export default function HomeScreen() {
       </View>
       <SyncBanner />
       {error && <Text style={styles.error}>{error}</Text>}
-      <Link href="/register" asChild>
-        <Pressable style={styles.button}>
-          <Text style={styles.buttonText}>Register beneficiary</Text>
-        </Pressable>
-      </Link>
+      <View style={styles.navRow}>
+        <Link href="/register" asChild>
+          <Pressable style={[styles.button, styles.navButton]}>
+            <Text style={styles.buttonText}>Register beneficiary</Text>
+          </Pressable>
+        </Link>
+        <Link href="/surveys/index" asChild>
+          <Pressable style={[styles.button, styles.navButton, styles.buttonSecondary]}>
+            <Text style={styles.buttonSecondaryText}>Surveys</Text>
+          </Pressable>
+        </Link>
+      </View>
       <FlatList
         style={{ marginTop: 16 }}
         data={items}
@@ -204,6 +211,10 @@ const styles = StyleSheet.create({
   muted: { color: "#78716C", fontSize: 13 },
   row: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   link: { color: "#0F766E", fontWeight: "600" },
+  navRow: { flexDirection: "row", gap: 10 },
+  navButton: { flex: 1 },
+  buttonSecondary: { backgroundColor: "#fff", borderWidth: 1, borderColor: "#0F766E" },
+  buttonSecondaryText: { color: "#0F766E", fontWeight: "600" },
   card: {
     backgroundColor: "#fff",
     borderRadius: 14,

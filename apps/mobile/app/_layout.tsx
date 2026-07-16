@@ -16,6 +16,8 @@ export default function RootLayout() {
       >
         <Stack.Screen name="index" options={{ title: "ImpactFlow Field" }} />
         <Stack.Screen name="register" options={{ title: "Register beneficiary" }} />
+        <Stack.Screen name="surveys/index" options={{ title: "Surveys" }} />
+        <Stack.Screen name="surveys/[id]" options={{ title: "Survey" }} />
       </Stack>
     </SyncProvider>
   );
