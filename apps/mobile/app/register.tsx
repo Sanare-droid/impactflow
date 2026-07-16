@@ -9,6 +9,8 @@ import {
 } from "react-native";
 import { router } from "expo-router";
 import { api } from "@/lib/api";
+import { createLocalBeneficiary } from "@/lib/db/repo";
+import { useSync } from "@/lib/sync/SyncContext";
 
 export default function RegisterScreen() {
   const [firstName, setFirstName] = useState("");
@@ -16,18 +18,22 @@ export default function RegisterScreen() {
   const [phone, setPhone] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { online, syncNow, refreshStatus } = useSync();
 
   async function onSubmit() {
     setBusy(true);
     setError(null);
     try {
-      await api.createBeneficiary({
+      await createLocalBeneficiary({
+        organization_id: api.organizationId,
         first_name: firstName.trim(),
         last_name: lastName.trim(),
         phone: phone.trim() || undefined,
-        consent_data_use: true,
-        status: "active",
       });
+      await refreshStatus();
+      if (online) {
+        void syncNow();
+      }
       router.back();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Registration failed");
@@ -39,7 +45,9 @@ export default function RegisterScreen() {
   return (
     <View style={styles.container}>
       <Text style={styles.help}>
-        Capture beneficiary details in the field. Sync uses the ImpactFlow API.
+        {online
+          ? "Saved locally and synced when the API is reachable."
+          : "You are offline — this registration will sync when you reconnect."}
       </Text>
       <TextInput
         style={styles.input}
@@ -69,7 +77,9 @@ export default function RegisterScreen() {
         {busy ? (
           <ActivityIndicator color="#fff" />
         ) : (
-          <Text style={styles.buttonText}>Save beneficiary</Text>
+          <Text style={styles.buttonText}>
+            {online ? "Save beneficiary" : "Save offline"}
+          </Text>
         )}
       </Pressable>
     </View>

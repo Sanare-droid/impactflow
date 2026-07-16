@@ -63,6 +63,27 @@ async def get_report(db: AsyncSession, organization_id: UUID, report_id: UUID) -
     return report
 
 
+def render_report_markdown(report: Report) -> str:
+    lines = [
+        f"# {report.name}",
+        "",
+        f"**Code:** {report.code}  ",
+        f"**Type:** {report.report_type}  ",
+        f"**Status:** {report.status}  ",
+    ]
+    if report.period_start or report.period_end:
+        lines.append(
+            f"**Period:** {report.period_start or '—'} → {report.period_end or '—'}  "
+        )
+    lines.append("")
+    if report.summary:
+        lines.extend(["## Summary", "", report.summary, ""])
+    if report.content:
+        lines.extend(["## Content", "", report.content, ""])
+    lines.append(f"_Exported from ImpactFlow · {report.code}_")
+    return "\n".join(lines)
+
+
 async def list_reports(
     db: AsyncSession,
     organization_id: UUID,
@@ -153,6 +174,7 @@ async def update_report(
     ip_address: Optional[str] = None,
     user_agent: Optional[str] = None,
 ) -> Report:
+    previous_status = report.status
     await _assert_links(db, report.organization_id, data)
     if "code" in data and data["code"]:
         new_code = make_code(data["code"], prefix="RPT-")
@@ -176,6 +198,21 @@ async def update_report(
         ip_address=ip_address,
         user_agent=user_agent,
     )
+    if previous_status != "published" and report.status == "published":
+        from app.services.events import EVENT_REPORT_PUBLISHED, emit_event
+
+        await emit_event(
+            db,
+            organization_id=report.organization_id,
+            event_type=EVENT_REPORT_PUBLISHED,
+            title=f"Report published: {report.name}",
+            body=f"{report.code} is now published.",
+            link="/app/reports",
+            severity="success",
+            resource_type="report",
+            resource_id=str(report.id),
+            role_slugs=["org_admin", "manager", "meal_officer"],
+        )
     return report
 
 

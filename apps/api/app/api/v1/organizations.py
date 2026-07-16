@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from typing import Annotated
-from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy import func, select
@@ -12,14 +11,11 @@ from app.api.deps import RequestContext, client_meta, get_current_context, requi
 from app.core.exceptions import NotFoundError
 from app.db.session import get_db
 from app.models.membership import OrganizationMembership
-from app.models.organization import Organization
 from app.models.permission import RolePermission
 from app.models.role import Role
-from app.models.user import User
 from app.schemas import (
     InviteUserRequest,
     MembershipResponse,
-    MessageResponse,
     OrganizationResponse,
     OrganizationUpdateRequest,
     PaginatedResponse,
@@ -165,7 +161,8 @@ async def invite_user(
 ) -> dict:
     if not ctx.organization:
         raise NotFoundError("No active organization context")
-    user, temp_password = await auth_service.invite_user(
+    ip, ua = client_meta(request)
+    user, temp_password, delivery = await auth_service.invite_user(
         db,
         organization_id=ctx.organization.id,
         email=str(body.email),
@@ -174,13 +171,28 @@ async def invite_user(
         role_id=body.role_id,
         actor=ctx.user,
         job_title=body.job_title,
+        send_invite=body.send_invite,
+        ip_address=ip,
+        user_agent=ua,
     )
-    # Temporary password returned once — in production send via email provider
-    return {
+    payload: dict = {
         "user": UserBrief.model_validate(user),
-        "temporary_password": temp_password,
-        "message": "User invited. Deliver the temporary password securely.",
+        "message": (
+            "User invited. Temporary password delivered via email."
+            if body.send_invite and temp_password
+            else "User invited."
+            if not temp_password
+            else "User invited. Deliver the temporary password securely."
+        ),
+        "email_delivery": {
+            "status": delivery.get("status"),
+            "provider": delivery.get("provider"),
+        },
     }
+    # Only return temp password once for newly created users (never log it)
+    if temp_password:
+        payload["temporary_password"] = temp_password
+    return payload
 
 
 @router.get("/roles", response_model=list[RoleResponse])

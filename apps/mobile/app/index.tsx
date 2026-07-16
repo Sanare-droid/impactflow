@@ -9,12 +9,13 @@ import {
   View,
 } from "react-native";
 import { Link, useFocusEffect } from "expo-router";
-import * as SecureStore from "expo-secure-store";
-import { api, Beneficiary } from "@/lib/api";
-
-const ACCESS_KEY = "if_access_token";
-const REFRESH_KEY = "if_refresh_token";
-const ORG_KEY = "if_organization_id";
+import { api } from "@/lib/api";
+import { getDb } from "@/lib/db";
+import { listLocalBeneficiaries } from "@/lib/db/repo";
+import type { LocalBeneficiary } from "@/lib/db/types";
+import { clearSession, hydrateSession, persistSession } from "@/lib/session";
+import { useSync } from "@/lib/sync/SyncContext";
+import { SyncBanner } from "@/components/SyncBanner";
 
 export default function HomeScreen() {
   const [email, setEmail] = useState("");
@@ -22,20 +23,17 @@ export default function HomeScreen() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [authed, setAuthed] = useState(false);
-  const [items, setItems] = useState<Beneficiary[]>([]);
+  const [items, setItems] = useState<LocalBeneficiary[]>([]);
+  const { online, syncNow, refreshStatus } = useSync();
 
   const hydrate = useCallback(async () => {
-    const access = await SecureStore.getItemAsync(ACCESS_KEY);
-    const refresh = await SecureStore.getItemAsync(REFRESH_KEY);
-    const org = await SecureStore.getItemAsync(ORG_KEY);
-    if (access && refresh) {
-      api.setSession({
-        access_token: access,
-        refresh_token: refresh,
-        organization_id: org,
-      });
-      setAuthed(true);
+    try {
+      await getDb();
+    } catch {
+      /* ignore on unsupported platforms */
     }
+    const ok = await hydrateSession();
+    setAuthed(ok);
   }, []);
 
   useEffect(() => {
@@ -45,13 +43,24 @@ export default function HomeScreen() {
   const loadBeneficiaries = useCallback(async () => {
     if (!api.accessToken) return;
     try {
-      const data = await api.listBeneficiaries();
-      setItems(data.items);
+      const local = await listLocalBeneficiaries();
+      setItems(local);
       setError(null);
+      if (online) {
+        await syncNow();
+        const refreshed = await listLocalBeneficiaries();
+        setItems(refreshed);
+      }
+      await refreshStatus();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load");
+      try {
+        setItems(await listLocalBeneficiaries());
+      } catch {
+        /* empty */
+      }
     }
-  }, []);
+  }, [online, refreshStatus, syncNow]);
 
   useFocusEffect(
     useCallback(() => {
@@ -68,16 +77,11 @@ export default function HomeScreen() {
         throw new Error("MFA required — complete setup on web first");
       }
       const orgId = tokens.user?.primary_organization_id ?? null;
-      api.setSession({
+      await persistSession({
         access_token: tokens.access_token,
         refresh_token: tokens.refresh_token,
         organization_id: orgId,
       });
-      await SecureStore.setItemAsync(ACCESS_KEY, tokens.access_token);
-      await SecureStore.setItemAsync(REFRESH_KEY, tokens.refresh_token);
-      if (orgId) {
-        await SecureStore.setItemAsync(ORG_KEY, orgId);
-      }
       setAuthed(true);
       await loadBeneficiaries();
     } catch (err) {
@@ -88,10 +92,7 @@ export default function HomeScreen() {
   }
 
   async function onLogout() {
-    api.clearSession();
-    await SecureStore.deleteItemAsync(ACCESS_KEY);
-    await SecureStore.deleteItemAsync(REFRESH_KEY);
-    await SecureStore.deleteItemAsync(ORG_KEY);
+    await clearSession();
     setAuthed(false);
     setItems([]);
   }
@@ -118,7 +119,11 @@ export default function HomeScreen() {
         />
         {error && <Text style={styles.error}>{error}</Text>}
         <Pressable style={styles.button} onPress={onLogin} disabled={busy}>
-          {busy ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Sign in</Text>}
+          {busy ? (
+            <ActivityIndicator color="#fff" />
+          ) : (
+            <Text style={styles.buttonText}>Sign in</Text>
+          )}
         </Pressable>
       </View>
     );
@@ -132,6 +137,7 @@ export default function HomeScreen() {
           <Text style={styles.link}>Sign out</Text>
         </Pressable>
       </View>
+      <SyncBanner />
       {error && <Text style={styles.error}>{error}</Text>}
       <Link href="/register" asChild>
         <Pressable style={styles.button}>
@@ -141,16 +147,31 @@ export default function HomeScreen() {
       <FlatList
         style={{ marginTop: 16 }}
         data={items}
-        keyExtractor={(item) => item.id}
+        keyExtractor={(item) => item.local_id}
         ListEmptyComponent={<Text style={styles.muted}>No beneficiaries yet.</Text>}
         renderItem={({ item }) => (
           <View style={styles.card}>
-            <Text style={styles.cardTitle}>
-              {item.first_name} {item.last_name}
-            </Text>
+            <View style={styles.row}>
+              <Text style={styles.cardTitle}>
+                {item.first_name} {item.last_name}
+              </Text>
+              {item.sync_status !== "synced" && (
+                <Text
+                  style={[
+                    styles.badge,
+                    item.sync_status === "failed" ? styles.badgeFail : styles.badgePending,
+                  ]}
+                >
+                  {item.sync_status}
+                </Text>
+              )}
+            </View>
             <Text style={styles.muted}>
-              {item.code} · {item.phone || "no phone"} · {item.status}
+              {item.code || "local"} · {item.phone || "no phone"} · {item.status}
             </Text>
+            {item.last_error ? (
+              <Text style={styles.errorSmall}>{item.last_error}</Text>
+            ) : null}
           </View>
         )}
       />
@@ -179,6 +200,7 @@ const styles = StyleSheet.create({
   },
   buttonText: { color: "#fff", fontWeight: "600" },
   error: { color: "#E11D48" },
+  errorSmall: { color: "#E11D48", fontSize: 11, marginTop: 4 },
   muted: { color: "#78716C", fontSize: 13 },
   row: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   link: { color: "#0F766E", fontWeight: "600" },
@@ -190,5 +212,16 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#F5F5F4",
   },
-  cardTitle: { fontWeight: "600", color: "#1C1917", marginBottom: 4 },
+  cardTitle: { fontWeight: "600", color: "#1C1917", marginBottom: 4, flex: 1 },
+  badge: {
+    fontSize: 10,
+    fontWeight: "700",
+    textTransform: "uppercase",
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    overflow: "hidden",
+  },
+  badgePending: { backgroundColor: "#FEF3C7", color: "#92400E" },
+  badgeFail: { backgroundColor: "#FFE4E6", color: "#9F1239" },
 });

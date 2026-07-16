@@ -5,10 +5,13 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import client_meta, get_current_context, RequestContext
+from app.api.deps import RequestContext, client_meta, get_current_context
 from app.core.config import settings
+from app.core.exceptions import ForbiddenError
 from app.db.session import get_db
 from app.schemas import (
+    ChangePasswordRequest,
+    ForgotPasswordRequest,
     LoginRequest,
     MFAEnableRequest,
     MFASetupResponse,
@@ -16,11 +19,13 @@ from app.schemas import (
     MessageResponse,
     RefreshRequest,
     RegisterOrganizationRequest,
+    ResetPasswordRequest,
     TokenResponse,
     UserBrief,
     UserResponse,
 )
 from app.services import auth as auth_service
+from app.services.rate_limit import enforce_rate_limit
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
@@ -32,6 +37,7 @@ async def register(
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> TokenResponse:
     ip, ua = client_meta(request)
+    await enforce_rate_limit(key=f"rl:register:{ip}", limit=5, window_seconds=3600)
     org, user, access, refresh = await auth_service.register_organization(
         db,
         organization_name=body.organization_name,
@@ -60,6 +66,10 @@ async def login(
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> TokenResponse:
     ip, ua = client_meta(request)
+    await enforce_rate_limit(key=f"rl:login:{ip}", limit=30, window_seconds=60)
+    await enforce_rate_limit(
+        key=f"rl:login:email:{str(body.email).lower()}", limit=10, window_seconds=60
+    )
     result = await auth_service.authenticate_user(
         db,
         email=str(body.email),
@@ -119,7 +129,62 @@ async def logout(
 async def me(
     ctx: Annotated[RequestContext, Depends(get_current_context)],
 ) -> UserResponse:
+    if ctx.auth_method == "api_key":
+        raise ForbiddenError("API keys cannot use /auth/me")
     return UserResponse.model_validate(ctx.user)
+
+
+@router.post("/change-password", response_model=MessageResponse)
+async def change_password(
+    body: ChangePasswordRequest,
+    request: Request,
+    ctx: Annotated[RequestContext, Depends(get_current_context)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> MessageResponse:
+    if ctx.auth_method != "jwt":
+        raise ForbiddenError("Password change requires user session")
+    ip, ua = client_meta(request)
+    await auth_service.change_password(
+        db,
+        user=ctx.user,
+        current_password=body.current_password,
+        new_password=body.new_password,
+        ip_address=ip,
+        user_agent=ua,
+    )
+    return MessageResponse(message="Password updated")
+
+
+@router.post("/forgot-password", response_model=MessageResponse)
+async def forgot_password(
+    body: ForgotPasswordRequest,
+    request: Request,
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> MessageResponse:
+    ip, _ua = client_meta(request)
+    await enforce_rate_limit(key=f"rl:forgot:{ip}", limit=10, window_seconds=3600)
+    result = await auth_service.request_password_reset(
+        db, email=str(body.email), ip_address=ip
+    )
+    return MessageResponse(message=result["message"])
+
+
+@router.post("/reset-password", response_model=MessageResponse)
+async def reset_password(
+    body: ResetPasswordRequest,
+    request: Request,
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> MessageResponse:
+    ip, ua = client_meta(request)
+    await enforce_rate_limit(key=f"rl:reset:{ip}", limit=20, window_seconds=3600)
+    await auth_service.reset_password(
+        db,
+        token=body.token,
+        new_password=body.new_password,
+        ip_address=ip,
+        user_agent=ua,
+    )
+    return MessageResponse(message="Password has been reset. You can sign in now.")
 
 
 @router.post("/mfa/setup", response_model=MFASetupResponse)
@@ -127,6 +192,8 @@ async def mfa_setup(
     ctx: Annotated[RequestContext, Depends(get_current_context)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> MFASetupResponse:
+    if ctx.auth_method != "jwt":
+        raise ForbiddenError("MFA requires user session")
     secret, uri = await auth_service.setup_mfa(db, ctx.user)
     return MFASetupResponse(secret=secret, provisioning_uri=uri)
 
@@ -137,6 +204,8 @@ async def mfa_enable(
     ctx: Annotated[RequestContext, Depends(get_current_context)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> MessageResponse:
+    if ctx.auth_method != "jwt":
+        raise ForbiddenError("MFA requires user session")
     await auth_service.enable_mfa(db, ctx.user, body.code)
     return MessageResponse(message="MFA enabled")
 
@@ -147,5 +216,7 @@ async def mfa_disable(
     ctx: Annotated[RequestContext, Depends(get_current_context)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> MessageResponse:
+    if ctx.auth_method != "jwt":
+        raise ForbiddenError("MFA requires user session")
     await auth_service.disable_mfa(db, ctx.user, body.code)
     return MessageResponse(message="MFA disabled")

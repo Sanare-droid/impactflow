@@ -11,6 +11,7 @@ export type UserBrief = {
   avatar_url?: string | null;
   is_active: boolean;
   mfa_enabled: boolean;
+  must_change_password?: boolean;
   primary_organization_id?: string | null;
 };
 
@@ -85,6 +86,13 @@ export type DashboardStats = {
   integrations_count: number;
   api_keys_count: number;
   branding_enabled_count: number;
+  notifications_count?: number;
+  unread_notifications_count?: number;
+  webhook_pending_count?: number;
+  webhook_failed_count?: number;
+  surveys_count?: number;
+  published_surveys_count?: number;
+  survey_responses_count?: number;
 };
 
 export type Role = {
@@ -693,6 +701,87 @@ export type OrgBranding = {
   updated_at: string;
 };
 
+export type NotificationItem = {
+  id: string;
+  organization_id: string;
+  user_id: string;
+  event_type: string;
+  title: string;
+  body?: string | null;
+  link?: string | null;
+  severity: string;
+  status: string;
+  read_at?: string | null;
+  resource_type?: string | null;
+  resource_id?: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type Survey = {
+  id: string;
+  organization_id: string;
+  name: string;
+  code: string;
+  description?: string | null;
+  status: string;
+  current_version: number;
+  created_at: string;
+  updated_at: string;
+};
+
+export type SurveyDetail = {
+  survey: Survey;
+  version: {
+    id: string;
+    survey_id: string;
+    version: number;
+    title: string;
+    schema: { fields?: Array<Record<string, unknown>> };
+    published_at?: string | null;
+    created_at: string;
+  };
+};
+
+export type SurveySubmission = {
+  id: string;
+  survey_id: string;
+  survey_version_id: string;
+  version: number;
+  status: string;
+  answers: Record<string, unknown>;
+  respondent_name?: string | null;
+  created_at: string;
+};
+
+export type PublicBranding = {
+  organization_name: string;
+  organization_slug: string;
+  product_name?: string | null;
+  tagline?: string | null;
+  is_enabled: boolean;
+  primary_color: string;
+  secondary_color: string;
+  accent_color?: string | null;
+  logo_url?: string | null;
+  favicon_url?: string | null;
+  login_background_url?: string | null;
+  support_email?: string | null;
+  support_url?: string | null;
+  hide_powered_by: boolean;
+};
+
+export type IndicatorProgressRow = {
+  indicator_id: string;
+  code: string;
+  name: string;
+  unit?: string | null;
+  target_value?: number | null;
+  actual_value?: number | null;
+  progress_pct?: number | null;
+  period_end?: string | null;
+};
+
 type ApiError = {
   message?: string;
   code?: string;
@@ -839,6 +928,27 @@ class ApiClient {
 
   me() {
     return this.request<UserBrief>("/auth/me");
+  }
+
+  changePassword(body: { current_password: string; new_password: string }) {
+    return this.request<{ message: string }>("/auth/change-password", {
+      method: "POST",
+      body: JSON.stringify(body),
+    });
+  }
+
+  forgotPassword(email: string) {
+    return this.request<{ message: string }>("/auth/forgot-password", {
+      method: "POST",
+      body: JSON.stringify({ email }),
+    });
+  }
+
+  resetPassword(body: { token: string; new_password: string }) {
+    return this.request<{ message: string }>("/auth/reset-password", {
+      method: "POST",
+      body: JSON.stringify(body),
+    });
   }
 
   currentOrganization() {
@@ -1276,6 +1386,13 @@ class ApiClient {
     });
   }
 
+  updateEvidence(id: string, body: Record<string, unknown>) {
+    return this.request<EvidenceItem>(`/evidence/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    });
+  }
+
   listAiConversations() {
     return this.request<Paginated<AiConversation>>("/ai/conversations?page_size=50");
   }
@@ -1415,6 +1532,88 @@ class ApiClient {
       method: "PATCH",
       body: JSON.stringify(body),
     });
+  }
+
+  listNotifications(params: { page?: number; status?: string } = {}) {
+    const q = new URLSearchParams();
+    if (params.page) q.set("page", String(params.page));
+    if (params.status) q.set("status", params.status);
+    const qs = q.toString();
+    return this.request<Paginated<NotificationItem>>(
+      `/notifications${qs ? `?${qs}` : ""}`,
+    );
+  }
+
+  notificationsUnreadCount() {
+    return this.request<{ unread_count: number }>("/notifications/unread-count");
+  }
+
+  markNotificationRead(id: string) {
+    return this.request<NotificationItem>(`/notifications/${id}/read`, {
+      method: "POST",
+    });
+  }
+
+  markAllNotificationsRead() {
+    return this.request<{ message: string }>("/notifications/read-all", {
+      method: "POST",
+    });
+  }
+
+  listSurveys(params: { status?: string } = {}) {
+    const q = new URLSearchParams({ page_size: "100" });
+    if (params.status) q.set("status", params.status);
+    return this.request<Paginated<Survey>>(`/surveys?${q}`);
+  }
+
+  createSurvey(body: Record<string, unknown>) {
+    return this.request<Survey>("/surveys", {
+      method: "POST",
+      body: JSON.stringify(body),
+    });
+  }
+
+  getSurvey(id: string) {
+    return this.request<SurveyDetail>(`/surveys/${id}`);
+  }
+
+  updateSurvey(id: string, body: Record<string, unknown>) {
+    return this.request<Survey>(`/surveys/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    });
+  }
+
+  submitSurveyResponse(id: string, body: Record<string, unknown>) {
+    return this.request<SurveySubmission>(`/surveys/${id}/responses`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    });
+  }
+
+  listSurveyResponses(params: { survey_id?: string } = {}) {
+    const q = new URLSearchParams({ page_size: "50" });
+    if (params.survey_id) q.set("survey_id", params.survey_id);
+    return this.request<Paginated<SurveySubmission>>(`/survey-responses?${q}`);
+  }
+
+  getPublicBranding(slug: string) {
+    return this.request<PublicBranding>(`/public/branding/${encodeURIComponent(slug)}`);
+  }
+
+  indicatorProgress() {
+    return this.request<{ items: IndicatorProgressRow[] }>("/indicators/progress");
+  }
+
+  async exportReportMarkdown(id: string): Promise<string> {
+    const headers = new Headers();
+    if (this.accessToken) headers.set("Authorization", `Bearer ${this.accessToken}`);
+    if (this.organizationId) headers.set("X-Organization-Id", this.organizationId);
+    const res = await fetch(`${API_V1}/reports/${id}/export?format=markdown`, {
+      headers,
+    });
+    if (!res.ok) throw new Error("Export failed");
+    return res.text();
   }
 }
 

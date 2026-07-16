@@ -289,6 +289,18 @@ async def add_logframe_result(
 # -------- Indicators --------
 
 
+@router.get("/indicators/progress")
+async def indicators_progress(
+    ctx: Annotated[
+        RequestContext, Depends(require_permissions("indicators:read", "indicators:manage"))
+    ],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> dict:
+    org_id = _require_org(ctx)
+    items = await meal_service.indicator_progress(db, org_id)
+    return {"items": items}
+
+
 @router.get("/indicators", response_model=PaginatedResponse[IndicatorResponse])
 async def list_indicators(
     ctx: Annotated[

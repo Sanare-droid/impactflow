@@ -22,7 +22,9 @@ from app.models.marketplace_install import MarketplaceInstallation
 from app.models.membership import OrganizationMembership
 from app.models.monitoring import MonitoringResult
 from app.models.narrative import AiNarrative
+from app.models.notification import Notification, WebhookDelivery
 from app.models.organization import Organization
+from app.models.password_reset import PasswordResetToken
 from app.models.permission import Permission, RolePermission
 from app.models.platform import IntegrationConnection, OrgApiKey, OrgBranding
 from app.models.prediction import AiPrediction
@@ -32,10 +34,12 @@ from app.models.refresh_token import RefreshToken
 from app.models.report import Report
 from app.models.role import Role
 from app.models.saved_dashboard import SavedDashboard
+from app.models.survey import Survey, SurveyResponse, SurveyVersion
 from app.models.task import Task
 from app.models.theory_of_change import TheoryOfChange
 from app.models.user import User
 from app.models.work_plan import WorkPlan
+from app.models.knowledge_chunk import KnowledgeChunk
 
 __all__ = [
     "Base",
@@ -47,6 +51,7 @@ __all__ = [
     "OrganizationMembership",
     "RefreshToken",
     "AuditLog",
+    "PasswordResetToken",
     "Program",
     "Project",
     "Activity",
@@ -78,9 +83,15 @@ __all__ = [
     "AiPrediction",
     "AiNarrative",
     "KnowledgeDocument",
+    "KnowledgeChunk",
     "MarketplaceApp",
     "MarketplaceInstallation",
     "OrgApiKey",
     "IntegrationConnection",
     "OrgBranding",
+    "Notification",
+    "WebhookDelivery",
+    "Survey",
+    "SurveyVersion",
+    "SurveyResponse",
 ]

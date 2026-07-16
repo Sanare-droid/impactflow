@@ -1001,3 +1001,60 @@ async def phase4_counts(db: AsyncSession, organization_id: UUID) -> dict[str, in
         "monitoring_results_count": monitoring or 0,
         "evaluations_count": evaluations or 0,
     }
+
+
+async def indicator_progress(
+    db: AsyncSession, organization_id: UUID, *, limit: int = 50
+) -> list[dict]:
+    """Targets vs latest actuals for active indicators."""
+    from app.models.indicator import IndicatorTarget
+    from app.models.monitoring import MonitoringResult
+
+    indicators = list(
+        await db.scalars(
+            select(Indicator)
+            .where(
+                Indicator.organization_id == organization_id,
+                Indicator.status == "active",
+            )
+            .order_by(Indicator.name.asc())
+            .limit(limit)
+        )
+    )
+    rows: list[dict] = []
+    for ind in indicators:
+        target = await db.scalar(
+            select(IndicatorTarget)
+            .where(IndicatorTarget.indicator_id == ind.id)
+            .order_by(IndicatorTarget.end_date.desc())
+            .limit(1)
+        )
+        actual = await db.scalar(
+            select(MonitoringResult)
+            .where(
+                MonitoringResult.indicator_id == ind.id,
+                MonitoringResult.organization_id == organization_id,
+            )
+            .order_by(MonitoringResult.reporting_date.desc())
+            .limit(1)
+        )
+        target_value = float(target.target_value) if target and target.target_value is not None else None
+        actual_value = (
+            float(actual.actual_value) if actual and actual.actual_value is not None else None
+        )
+        progress_pct = None
+        if target_value and target_value != 0 and actual_value is not None:
+            progress_pct = round((actual_value / target_value) * 100, 1)
+        rows.append(
+            {
+                "indicator_id": str(ind.id),
+                "code": ind.code,
+                "name": ind.name,
+                "unit": ind.unit,
+                "target_value": target_value,
+                "actual_value": actual_value,
+                "progress_pct": progress_pct,
+                "period_end": str(actual.reporting_date) if actual and actual.reporting_date else None,
+            }
+        )
+    return rows

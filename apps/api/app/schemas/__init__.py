@@ -105,6 +105,7 @@ class UserBrief(ORMModel):
     avatar_url: Optional[str] = None
     is_active: bool
     mfa_enabled: bool
+    must_change_password: bool = False
     primary_organization_id: Optional[UUID] = None
 
 
@@ -117,6 +118,20 @@ class UserResponse(UserBrief):
     is_superuser: bool
     last_login_at: Optional[Any] = None
     created_at: Any
+
+
+class ChangePasswordRequest(BaseModel):
+    current_password: str = Field(min_length=1, max_length=128)
+    new_password: str = Field(min_length=12, max_length=128)
+
+
+class ForgotPasswordRequest(BaseModel):
+    email: EmailStr
+
+
+class ResetPasswordRequest(BaseModel):
+    token: str = Field(min_length=20, max_length=200)
+    new_password: str = Field(min_length=12, max_length=128)
 
 
 class UserUpdateRequest(BaseModel):
@@ -248,6 +263,13 @@ class DashboardStatsResponse(BaseModel):
     integrations_count: int = 0
     api_keys_count: int = 0
     branding_enabled_count: int = 0
+    notifications_count: int = 0
+    unread_notifications_count: int = 0
+    webhook_pending_count: int = 0
+    webhook_failed_count: int = 0
+    surveys_count: int = 0
+    published_surveys_count: int = 0
+    survey_responses_count: int = 0
 
 
 class AuditLogResponse(ORMModel):
@@ -1739,6 +1761,44 @@ class PublicBrandingResponse(BaseModel):
     support_email: Optional[str] = None
     support_url: Optional[str] = None
     hide_powered_by: bool = False
+
+
+class NotificationResponse(ORMModel):
+    id: UUID
+    organization_id: UUID
+    user_id: UUID
+    event_type: str
+    title: str
+    body: Optional[str] = None
+    link: Optional[str] = None
+    severity: str
+    status: str
+    read_at: Optional[Any] = None
+    resource_type: Optional[str] = None
+    resource_id: Optional[str] = None
+    created_at: Any
+    updated_at: Any
+
+
+class NotificationUnreadCountResponse(BaseModel):
+    unread_count: int
+
+
+class WebhookDeliveryResponse(ORMModel):
+    id: UUID
+    organization_id: UUID
+    integration_id: UUID
+    event_type: str
+    status: str
+    attempt_count: int
+    max_attempts: int
+    next_attempt_at: Optional[Any] = None
+    delivered_at: Optional[Any] = None
+    last_error: Optional[str] = None
+    response_status: Optional[int] = None
+    endpoint_url: Optional[str] = None
+    created_at: Any
+    updated_at: Any
 
 
 TokenResponse.model_rebuild()

@@ -1,6 +1,6 @@
 # ImpactFlow Field (Expo)
 
-Phase 5 field app for beneficiary registration against the ImpactFlow API.
+Phase 5/Track D field app: offline-first beneficiary registration against the ImpactFlow API.
 
 ## Requirements
 
@@ -11,7 +11,7 @@ Phase 5 field app for beneficiary registration against the ImpactFlow API.
 
 ```bash
 cd apps/mobile
-npm install
+npm install --legacy-peer-deps
 npx expo start -c
 ```
 
@@ -19,9 +19,17 @@ Set `EXPO_PUBLIC_API_URL` to your API base (use your machine LAN IP for a physic
 
 ## Current capability
 
-- Secure token storage
+- Secure token storage + refresh on reconnect / 401
 - Sign in via `/api/v1/auth/login`
-- List beneficiaries
-- Register beneficiaries
+- **SQLite** local store: communities, households, beneficiaries, mutation queue
+- Offline create beneficiary (`sync_status: pending`) → push on reconnect
+- Pull deltas via `updated_after` (server-wins for synced rows)
+- Online/offline banner, last sync time, retry failed queue
 
-Offline SQLite queue + sync lands in a follow-up iteration; the domain APIs already support field enrollment.
+## Offline test (exit criteria)
+
+1. Sign in while online (pulls caseload).
+2. Enable airplane mode.
+3. Register a beneficiary — appears locally as **pending**.
+4. Disable airplane mode — Sync banner pushes queue; badge clears.
+5. Confirm the person appears in the web Beneficiaries list.

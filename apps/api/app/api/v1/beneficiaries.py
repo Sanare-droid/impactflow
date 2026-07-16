@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Annotated, Optional
 from uuid import UUID
+from datetime import datetime
 
 from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -59,10 +60,17 @@ async def list_communities(
     page_size: int = Query(20, ge=1, le=100),
     status: Optional[str] = None,
     search: Optional[str] = None,
+    updated_after: Optional[datetime] = Query(None),
 ) -> PaginatedResponse[CommunityResponse]:
     org_id = _require_org(ctx)
     items, total = await beneficiary_service.list_communities(
-        db, org_id, page=page, page_size=page_size, status=status, search=search
+        db,
+        org_id,
+        page=page,
+        page_size=page_size,
+        status=status,
+        search=search,
+        updated_after=updated_after,
     )
     return PaginatedResponse(
         items=[CommunityResponse.model_validate(i) for i in items],
@@ -162,6 +170,7 @@ async def list_households(
     community_id: Optional[UUID] = None,
     status: Optional[str] = None,
     search: Optional[str] = None,
+    updated_after: Optional[datetime] = Query(None),
 ) -> PaginatedResponse[HouseholdResponse]:
     org_id = _require_org(ctx)
     items, total = await beneficiary_service.list_households(
@@ -172,6 +181,7 @@ async def list_households(
         community_id=community_id,
         status=status,
         search=search,
+        updated_after=updated_after,
     )
     return PaginatedResponse(
         items=[HouseholdResponse.model_validate(i) for i in items],
@@ -273,6 +283,7 @@ async def list_beneficiaries(
     community_id: Optional[UUID] = None,
     status: Optional[str] = None,
     search: Optional[str] = None,
+    updated_after: Optional[datetime] = Query(None),
 ) -> PaginatedResponse[BeneficiaryResponse]:
     org_id = _require_org(ctx)
     items, total = await beneficiary_service.list_beneficiaries(
@@ -284,6 +295,7 @@ async def list_beneficiaries(
         community_id=community_id,
         status=status,
         search=search,
+        updated_after=updated_after,
     )
     return PaginatedResponse(
         items=[BeneficiaryResponse.model_validate(i) for i in items],

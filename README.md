@@ -78,6 +78,18 @@ Open http://localhost:3000 — create a workspace.
 
 Optional: run web in Docker too (`docker compose --profile full up --build`). On Windows this is slower and more network-sensitive; local `npm run dev` is preferred.
 
+## Docs
+
+- [Architecture](docs/ARCHITECTURE.md)
+- [Gaps & polish plan](docs/GAPS_AND_POLISH_PLAN.md)
+- [Deploy](docs/DEPLOY.md)
+
+## Demo seed
+
+```bash
+docker compose exec api python -m app.scripts.seed_demo
+```
+
 ## API surface (Phase 1)
 
 | Method | Path | Description |
@@ -129,9 +141,23 @@ Send `Authorization: Bearer <access_token>` and `X-Organization-Id: <uuid>` on t
 ## Tests
 
 ```bash
+# API unit + integration (SQLite in-memory)
 cd apps/api
 pytest
+
+# Lint
+ruff check app tests
+
+# Web
+cd apps/web
+npm run lint
+npm run build
+
+# Optional Playwright smoke (API + web must be running)
+npm run test:e2e
 ```
+
+CI runs on every PR via `.github/workflows/ci.yml` (ruff, pytest, web lint/build, Playwright).
 
 ## Definition of done — Phase 1
 
@@ -200,3 +226,14 @@ AI Copilot → Predictions → Narratives → Knowledge Base
 - [x] Public branding endpoint by org slug
 - [x] Permissions + audit on mutations
 - [x] Web UI (marketplace, integrations/API keys, branding + dashboard platform snapshot)
+
+## Track A — Pilot hardening
+
+- [x] Change / forgot / reset password APIs + web UI
+- [x] Invite email stub + no secrets in audit logs
+- [x] API key request authentication (`X-Api-Key` / Bearer `if_…`)
+- [x] Redis rate limiting (auth, branding, AI)
+- [x] Production compose + deploy docs
+- [x] Demo seed CLI
+- [x] Production secret hygiene (refuse default JWT/ENCRYPTION keys)
+- [x] Alembic `0009_phase9` (password reset tokens)

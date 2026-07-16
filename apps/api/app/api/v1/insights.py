@@ -129,6 +129,32 @@ async def get_report(
     return ReportResponse.model_validate(report)
 
 
+@router.get("/reports/{report_id}/export")
+async def export_report(
+    report_id: UUID,
+    ctx: Annotated[
+        RequestContext,
+        Depends(require_permissions("reports:read", "reports:manage", "reports:export")),
+    ],
+    db: Annotated[AsyncSession, Depends(get_db)],
+    format: str = Query("markdown", pattern="^(markdown|html)$"),
+):
+    from fastapi.responses import PlainTextResponse
+
+    org_id = _require_org(ctx)
+    report = await insights_service.get_report(db, org_id, report_id)
+    md = insights_service.render_report_markdown(report)
+    if format == "html":
+        html = (
+            "<!DOCTYPE html><html><head><meta charset='utf-8'>"
+            f"<title>{report.name}</title></head><body>"
+            f"<pre style='font-family:Georgia,serif;white-space:pre-wrap'>{md}</pre>"
+            "</body></html>"
+        )
+        return PlainTextResponse(html, media_type="text/html; charset=utf-8")
+    return PlainTextResponse(md, media_type="text/markdown; charset=utf-8")
+
+
 @router.patch("/reports/{report_id}", response_model=ReportResponse)
 async def update_report(
     report_id: UUID,

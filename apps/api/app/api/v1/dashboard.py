@@ -66,6 +66,22 @@ async def dashboard_stats(
         map_features_count=stats["map_features_count"],
         evidence_count=stats["evidence_count"],
         verified_evidence_count=stats["verified_evidence_count"],
+        ai_conversations_count=stats["ai_conversations_count"],
+        ai_predictions_count=stats["ai_predictions_count"],
+        open_predictions_count=stats["open_predictions_count"],
+        ai_narratives_count=stats["ai_narratives_count"],
+        knowledge_documents_count=stats["knowledge_documents_count"],
+        marketplace_installs_count=stats["marketplace_installs_count"],
+        integrations_count=stats["integrations_count"],
+        api_keys_count=stats["api_keys_count"],
+        branding_enabled_count=stats["branding_enabled_count"],
+        notifications_count=stats["notifications_count"],
+        unread_notifications_count=stats["unread_notifications_count"],
+        webhook_pending_count=stats["webhook_pending_count"],
+        webhook_failed_count=stats["webhook_failed_count"],
+        surveys_count=stats["surveys_count"],
+        published_surveys_count=stats["published_surveys_count"],
+        survey_responses_count=stats["survey_responses_count"],
     )
 
 

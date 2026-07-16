@@ -12,7 +12,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.config import settings
-from app.core.exceptions import ConflictError, ForbiddenError, NotFoundError, UnauthorizedError
+from app.core.exceptions import (
+    AppError,
+    ConflictError,
+    ForbiddenError,
+    NotFoundError,
+    UnauthorizedError,
+)
 from app.core.permissions import PERMISSION_CATALOG, SYSTEM_ROLES
 from app.core.security import (
     create_access_token,
@@ -504,7 +510,13 @@ async def invite_user(
     role_id: UUID,
     actor: User,
     job_title: Optional[str] = None,
-) -> tuple[User, str]:
+    send_invite: bool = True,
+    ip_address: Optional[str] = None,
+    user_agent: Optional[str] = None,
+) -> tuple[User, Optional[str], dict]:
+    """Invite a user. Returns (user, temporary_password_or_none, delivery_meta)."""
+    from app.services.mailer import send_email
+
     role_result = await db.execute(
         select(Role).where(
             Role.id == role_id,
@@ -518,7 +530,8 @@ async def invite_user(
     email_norm = email.lower().strip()
     existing = await db.execute(select(User).where(User.email == email_norm))
     user = existing.scalar_one_or_none()
-    temp_password = generate_temp_password()
+    temp_password: Optional[str] = None
+    created_new = False
 
     if user:
         mem_check = await db.execute(
@@ -530,6 +543,7 @@ async def invite_user(
         if mem_check.scalar_one_or_none():
             raise ConflictError("User is already a member of this organization")
     else:
+        temp_password = generate_temp_password()
         user = User(
             email=email_norm,
             hashed_password=hash_password(temp_password),
@@ -542,6 +556,7 @@ async def invite_user(
         )
         db.add(user)
         await db.flush()
+        created_new = True
 
     membership = OrganizationMembership(
         organization_id=organization_id,
@@ -554,6 +569,27 @@ async def invite_user(
     )
     db.add(membership)
 
+    delivery: dict = {"email_status": "skipped", "send_invite": send_invite}
+    if send_invite:
+        login_url = f"{settings.frontend_url.rstrip('/')}/login"
+        if created_new and temp_password:
+            body = (
+                f"You have been invited to ImpactFlow AI.\n\n"
+                f"Email: {user.email}\n"
+                f"Temporary password: {temp_password}\n"
+                f"Sign in: {login_url}\n\n"
+                f"You will be asked to change your password after login."
+            )
+            subject = "Your ImpactFlow AI invitation"
+        else:
+            body = (
+                f"You have been added to an organization on ImpactFlow AI.\n\n"
+                f"Sign in with your existing account: {login_url}"
+            )
+            subject = "You've been added to an ImpactFlow organization"
+        delivery = await send_email(to=user.email, subject=subject, body=body)
+        delivery["send_invite"] = True
+
     await write_audit_log(
         db,
         action="users.invite",
@@ -563,9 +599,172 @@ async def invite_user(
         actor_id=actor.id,
         actor_email=actor.email,
         description=f"Invited {user.email} as {role.slug}",
-        changes={"role_id": str(role.id)},
+        # Never put passwords in audit changes
+        changes={
+            "role_id": str(role.id),
+            "created_new_user": created_new,
+            "email_status": delivery.get("status"),
+        },
+        ip_address=ip_address,
+        user_agent=user_agent,
     )
-    return user, temp_password
+    from app.services.events import EVENT_USER_INVITED, emit_event
+
+    await emit_event(
+        db,
+        organization_id=organization_id,
+        event_type=EVENT_USER_INVITED,
+        title=f"User invited: {user.email}",
+        body=f"{user.first_name} {user.last_name} joined as {role.name}.",
+        link="/app/users",
+        severity="info",
+        resource_type="user",
+        resource_id=str(user.id),
+        exclude_user_id=actor.id,
+        role_slugs=["org_admin", "manager"],
+        metadata={"role": role.slug},
+    )
+    return user, temp_password, delivery
+
+
+def _validate_password_strength(password: str) -> str:
+    if len(password) < settings.password_min_length:
+        raise AppError(
+            f"Password must be at least {settings.password_min_length} characters",
+            code="weak_password",
+        )
+    if not any(c.isupper() for c in password):
+        raise AppError("Password must contain an uppercase letter", code="weak_password")
+    if not any(c.islower() for c in password):
+        raise AppError("Password must contain a lowercase letter", code="weak_password")
+    if not any(c.isdigit() for c in password):
+        raise AppError("Password must contain a digit", code="weak_password")
+    return password
+
+
+async def change_password(
+    db: AsyncSession,
+    *,
+    user: User,
+    current_password: str,
+    new_password: str,
+    ip_address: Optional[str] = None,
+    user_agent: Optional[str] = None,
+) -> User:
+    if not verify_password(current_password, user.hashed_password):
+        raise UnauthorizedError("Current password is incorrect")
+    new_password = _validate_password_strength(new_password)
+    if verify_password(new_password, user.hashed_password):
+        raise AppError("New password must be different from the current password")
+    user.hashed_password = hash_password(new_password)
+    user.must_change_password = False
+    user.password_changed_at = utcnow()
+    await db.flush()
+    await write_audit_log(
+        db,
+        action="auth.password_change",
+        resource_type="user",
+        resource_id=user.id,
+        organization_id=user.primary_organization_id,
+        actor_id=user.id,
+        actor_email=user.email,
+        description="Password changed",
+        ip_address=ip_address,
+        user_agent=user_agent,
+    )
+    return user
+
+
+async def request_password_reset(
+    db: AsyncSession,
+    *,
+    email: str,
+    ip_address: Optional[str] = None,
+) -> dict:
+    """Always returns a generic message; emails only if user exists."""
+    from app.models.password_reset import PasswordResetToken
+    from app.services.mailer import send_email
+
+    email_norm = email.lower().strip()
+    user = await db.scalar(select(User).where(User.email == email_norm, User.is_active.is_(True)))
+    if user:
+        raw = secrets.token_urlsafe(32)
+        token = PasswordResetToken(
+            user_id=user.id,
+            token_hash=hash_token(raw),
+            expires_at=utcnow() + timedelta(hours=1),
+            requested_ip=ip_address,
+        )
+        db.add(token)
+        await db.flush()
+        reset_url = f"{settings.frontend_url.rstrip('/')}/reset-password?token={raw}"
+        await send_email(
+            to=user.email,
+            subject="Reset your ImpactFlow password",
+            body=(
+                f"Use this link to reset your password (expires in 1 hour):\n{reset_url}\n\n"
+                f"If you did not request this, ignore this email."
+            ),
+        )
+        await write_audit_log(
+            db,
+            action="auth.password_reset_request",
+            resource_type="user",
+            resource_id=user.id,
+            organization_id=user.primary_organization_id,
+            actor_id=user.id,
+            actor_email=user.email,
+            description="Password reset requested",
+            ip_address=ip_address,
+        )
+    return {
+        "message": "If an account exists for that email, password reset instructions were sent."
+    }
+
+
+async def reset_password(
+    db: AsyncSession,
+    *,
+    token: str,
+    new_password: str,
+    ip_address: Optional[str] = None,
+    user_agent: Optional[str] = None,
+) -> User:
+    from app.models.password_reset import PasswordResetToken
+
+    new_password = _validate_password_strength(new_password)
+    token_hash = hash_token(token)
+    row = await db.scalar(
+        select(PasswordResetToken).where(
+            PasswordResetToken.token_hash == token_hash,
+            PasswordResetToken.used_at.is_(None),
+        )
+    )
+    if not row or row.expires_at < utcnow():
+        raise AppError("Invalid or expired reset token", code="invalid_reset_token")
+    user = await db.get(User, row.user_id)
+    if not user or not user.is_active:
+        raise NotFoundError("User not found")
+    user.hashed_password = hash_password(new_password)
+    user.must_change_password = False
+    user.password_changed_at = utcnow()
+    user.failed_login_attempts = 0
+    user.locked_until = None
+    row.used_at = utcnow()
+    await db.flush()
+    await write_audit_log(
+        db,
+        action="auth.password_reset",
+        resource_type="user",
+        resource_id=user.id,
+        organization_id=user.primary_organization_id,
+        actor_id=user.id,
+        actor_email=user.email,
+        description="Password reset completed",
+        ip_address=ip_address,
+        user_agent=user_agent,
+    )
+    return user
 
 
 async def get_dashboard_stats(db: AsyncSession, organization_id: UUID) -> dict:
@@ -577,6 +776,8 @@ async def get_dashboard_stats(db: AsyncSession, organization_id: UUID) -> dict:
     from app.services.insights import phase6_counts
     from app.services.ai import phase7_counts
     from app.services.platform import phase8_counts
+    from app.services.notifications import phase10_counts
+    from app.services.surveys import phase11_survey_counts
 
     users_count = await db.scalar(
         select(func.count())
@@ -607,6 +808,8 @@ async def get_dashboard_stats(db: AsyncSession, organization_id: UUID) -> dict:
     insights_counts = await phase6_counts(db, organization_id)
     ai_counts = await phase7_counts(db, organization_id)
     platform_counts = await phase8_counts(db, organization_id)
+    notify_counts = await phase10_counts(db, organization_id)
+    survey_counts = await phase11_survey_counts(db, organization_id)
     return {
         "users_count": users_count or 0,
         "active_memberships": users_count or 0,
@@ -620,4 +823,6 @@ async def get_dashboard_stats(db: AsyncSession, organization_id: UUID) -> dict:
         **insights_counts,
         **ai_counts,
         **platform_counts,
+        **notify_counts,
+        **survey_counts,
     }

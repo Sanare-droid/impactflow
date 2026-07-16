@@ -98,12 +98,13 @@ export default function ReportsPage() {
                 <th className="pb-3 font-medium">Code</th>
                 <th className="pb-3 font-medium">Type</th>
                 <th className="pb-3 font-medium">Status</th>
+                <th className="pb-3 font-medium">Export</th>
               </tr>
             </thead>
             <tbody>
               {isLoading && (
                 <tr>
-                  <td className="py-4 text-stone-400" colSpan={4}>
+                  <td className="py-4 text-stone-400" colSpan={5}>
                     Loading…
                   </td>
                 </tr>
@@ -118,6 +119,24 @@ export default function ReportsPage() {
                   <td className="py-3 capitalize">{r.report_type}</td>
                   <td className="py-3">
                     <StatusBadge status={r.status} />
+                  </td>
+                  <td className="py-3">
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      onClick={async () => {
+                        const md = await api.exportReportMarkdown(r.id);
+                        const blob = new Blob([md], { type: "text/markdown" });
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement("a");
+                        a.href = url;
+                        a.download = `${r.code}.md`;
+                        a.click();
+                        URL.revokeObjectURL(url);
+                      }}
+                    >
+                      Markdown
+                    </Button>
                   </td>
                 </tr>
               ))}

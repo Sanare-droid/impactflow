@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 from typing import Optional
 from uuid import UUID
@@ -68,6 +68,7 @@ async def list_communities(
     page_size: int,
     status: Optional[str] = None,
     search: Optional[str] = None,
+    updated_after: Optional[datetime] = None,
 ) -> tuple[list[Community], int]:
     filters = [Community.organization_id == organization_id]
     if status:
@@ -75,6 +76,8 @@ async def list_communities(
     if search:
         like = f"%{search.strip()}%"
         filters.append(or_(Community.name.ilike(like), Community.code.ilike(like)))
+    if updated_after:
+        filters.append(Community.updated_at >= updated_after)
     total = await db.scalar(select(func.count()).select_from(Community).where(*filters)) or 0
     result = await db.execute(
         select(Community)
@@ -229,6 +232,7 @@ async def list_households(
     community_id: Optional[UUID] = None,
     status: Optional[str] = None,
     search: Optional[str] = None,
+    updated_after: Optional[datetime] = None,
 ) -> tuple[list[Household], int]:
     filters = [Household.organization_id == organization_id]
     if community_id:
@@ -238,6 +242,8 @@ async def list_households(
     if search:
         like = f"%{search.strip()}%"
         filters.append(or_(Household.name.ilike(like), Household.code.ilike(like)))
+    if updated_after:
+        filters.append(Household.updated_at >= updated_after)
     total = await db.scalar(select(func.count()).select_from(Household).where(*filters)) or 0
     result = await db.execute(
         select(Household)
@@ -391,6 +397,7 @@ async def list_beneficiaries(
     community_id: Optional[UUID] = None,
     status: Optional[str] = None,
     search: Optional[str] = None,
+    updated_after: Optional[datetime] = None,
 ) -> tuple[list[Beneficiary], int]:
     filters = [Beneficiary.organization_id == organization_id]
     if household_id:
@@ -410,6 +417,8 @@ async def list_beneficiaries(
                 Beneficiary.phone.ilike(like),
             )
         )
+    if updated_after:
+        filters.append(Beneficiary.updated_at >= updated_after)
     total = await db.scalar(select(func.count()).select_from(Beneficiary).where(*filters)) or 0
     result = await db.execute(
         select(Beneficiary)

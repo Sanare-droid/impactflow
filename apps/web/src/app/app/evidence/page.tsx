@@ -5,6 +5,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
+import { EmptyState } from "@/components/ui/empty-state";
 import { Input, Label } from "@/components/ui/input";
 import { StatusBadge } from "@/components/ui/status-badge";
 
@@ -36,6 +37,12 @@ export default function EvidencePage() {
       await qc.invalidateQueries({ queryKey: ["dashboard-stats"] });
     },
     onError: (err: Error) => setError(err.message),
+  });
+
+  const setStatus = useMutation({
+    mutationFn: ({ id, status }: { id: string; status: string }) =>
+      api.updateEvidence(id, { status }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["evidence"] }),
   });
 
   return (
@@ -101,13 +108,24 @@ export default function EvidencePage() {
                 <th className="pb-3 font-medium">Type</th>
                 <th className="pb-3 font-medium">Source</th>
                 <th className="pb-3 font-medium">Status</th>
+                <th className="pb-3 font-medium">Actions</th>
               </tr>
             </thead>
             <tbody>
               {isLoading && (
                 <tr>
-                  <td className="py-4 text-stone-400" colSpan={5}>
+                  <td className="py-4 text-stone-400" colSpan={6}>
                     Loading…
+                  </td>
+                </tr>
+              )}
+              {!isLoading && (data?.items.length ?? 0) === 0 && (
+                <tr>
+                  <td className="py-6" colSpan={6}>
+                    <EmptyState
+                      title="No evidence yet"
+                      description="Register documents, photos, or case materials for verification."
+                    />
                   </td>
                 </tr>
               )}
@@ -122,6 +140,30 @@ export default function EvidencePage() {
                   <td className="py-3">{item.source || "—"}</td>
                   <td className="py-3">
                     <StatusBadge status={item.status} />
+                  </td>
+                  <td className="py-3">
+                    <div className="flex gap-2">
+                      {item.status !== "verified" && (
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          disabled={setStatus.isPending}
+                          onClick={() => setStatus.mutate({ id: item.id, status: "verified" })}
+                        >
+                          Verify
+                        </Button>
+                      )}
+                      {item.status !== "rejected" && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          disabled={setStatus.isPending}
+                          onClick={() => setStatus.mutate({ id: item.id, status: "rejected" })}
+                        >
+                          Reject
+                        </Button>
+                      )}
+                    </div>
                   </td>
                 </tr>
               ))}

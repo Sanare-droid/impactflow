@@ -52,6 +52,18 @@ class Settings(BaseSettings):
     openai_api_key: str = ""
     openai_model: str = "gpt-4o"
 
+    # Email (optional SMTP — falls back to log stub)
+    smtp_host: str = ""
+    smtp_port: int = 587
+    smtp_user: str = ""
+    smtp_password: str = ""
+    smtp_from: str = ""
+    smtp_use_tls: bool = True
+
+    # Background jobs
+    jobs_poll_seconds: int = 30
+    jobs_enabled: bool = True
+
     # Password policy
     password_min_length: int = 12
     max_login_attempts: int = 5

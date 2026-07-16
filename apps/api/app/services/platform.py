@@ -547,14 +547,46 @@ async def test_integration(
     ip: Optional[str] = None,
     user_agent: Optional[str] = None,
 ) -> IntegrationConnection:
-    """Mark a dry-run connectivity check (no outbound call without configured worker)."""
+    """Enqueue and immediately attempt a ping delivery to the integration endpoint."""
+    from app.models.notification import WebhookDelivery
+    from app.services.jobs import _deliver_one
+
     row = await get_integration(db, organization_id, integration_id)
-    if not row.endpoint_url and row.provider == "webhook":
-        raise AppError("Webhook endpoint URL is required before testing")
-    row.last_sync_at = utcnow()
-    row.last_error = None
-    row.status = "active"
+    if not row.endpoint_url:
+        raise AppError("Endpoint URL is required before testing")
+
+    payload = {
+        "event": "integration.test",
+        "organization_id": str(organization_id),
+        "title": f"ImpactFlow test: {row.name}",
+        "body": "Connectivity check from ImpactFlow AI.",
+        "link": "/app/integrations",
+        "severity": "info",
+        "occurred_at": utcnow().isoformat(),
+        "metadata": {"integration_id": str(row.id), "provider": row.provider},
+    }
+    delivery = WebhookDelivery(
+        organization_id=organization_id,
+        integration_id=row.id,
+        event_type="integration.test",
+        status="pending",
+        next_attempt_at=utcnow(),
+        payload=payload,
+        endpoint_url=row.endpoint_url,
+    )
+    db.add(delivery)
     await db.flush()
+    await _deliver_one(db, delivery)
+    await db.flush()
+
+    if delivery.status != "delivered":
+        row.last_error = delivery.last_error or "Test delivery failed"
+        row.status = "error"
+    else:
+        row.last_sync_at = utcnow()
+        row.last_error = None
+        row.status = "active"
+
     await write_audit_log(
         db,
         organization_id=organization_id,
@@ -562,9 +594,10 @@ async def test_integration(
         action="integrations.test",
         resource_type="integration_connection",
         resource_id=str(row.id),
-        description=f"Tested integration '{row.name}'",
+        description=f"Tested integration '{row.name}' ({delivery.status})",
         ip_address=ip,
         user_agent=user_agent,
+        changes={"delivery_status": delivery.status, "response_status": delivery.response_status},
     )
     await db.refresh(row)
     return row

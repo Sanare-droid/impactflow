@@ -16,6 +16,15 @@ export default function AuthenticatedLayout({
   useEffect(() => {
     if (!loading && !user) {
       router.replace("/login");
+      return;
+    }
+    if (
+      !loading &&
+      user?.must_change_password &&
+      typeof window !== "undefined" &&
+      !window.location.pathname.startsWith("/app/settings")
+    ) {
+      router.replace("/app/settings?changePassword=1");
     }
   }, [loading, user, router]);
 

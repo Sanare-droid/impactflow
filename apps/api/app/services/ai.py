@@ -373,6 +373,21 @@ async def generate_prediction(
         user_agent=user_agent,
         changes={"severity": pred.severity, "provider": pred.provider},
     )
+    from app.services.events import EVENT_PREDICTION_OPENED, emit_event
+
+    await emit_event(
+        db,
+        organization_id=organization_id,
+        event_type=EVENT_PREDICTION_OPENED,
+        title=f"New prediction: {pred.title}",
+        body=pred.summary[:500] if pred.summary else None,
+        link="/app/predictions",
+        severity="warning" if pred.severity in ("high", "critical") else "info",
+        resource_type="ai_prediction",
+        resource_id=str(pred.id),
+        role_slugs=["org_admin", "manager", "meal_officer"],
+        metadata={"prediction_type": pred.prediction_type, "severity": pred.severity},
+    )
     await db.refresh(pred)
     return pred
 
@@ -625,9 +640,53 @@ async def search_knowledge(
     query: str,
     limit: int = 5,
 ) -> list[KnowledgeDocument]:
-    like = f"%{query.strip()[:80]}%"
-    if not query.strip():
+    """Hybrid retrieval: embedding similarity over chunks, with ILIKE fallback."""
+    from app.models.knowledge_chunk import KnowledgeChunk
+    from app.services.embeddings import cosine_similarity, embed_text
+
+    q = query.strip()
+    if not q:
         return []
+
+    # Vector / hashing retrieval
+    query_vec, _model = await embed_text(q)
+    chunks = list(
+        await db.scalars(
+            select(KnowledgeChunk).where(KnowledgeChunk.organization_id == organization_id).limit(500)
+        )
+    )
+    scored: list[tuple[float, UUID]] = []
+    for chunk in chunks:
+        emb = list(chunk.embedding or [])
+        if not emb:
+            continue
+        score = cosine_similarity(query_vec, emb)
+        if score > 0.05:
+            scored.append((score, chunk.document_id))
+    scored.sort(key=lambda x: x[0], reverse=True)
+    doc_ids: list[UUID] = []
+    for _score, doc_id in scored:
+        if doc_id not in doc_ids:
+            doc_ids.append(doc_id)
+        if len(doc_ids) >= limit:
+            break
+    if doc_ids:
+        docs = list(
+            await db.scalars(
+                select(KnowledgeDocument).where(
+                    KnowledgeDocument.organization_id == organization_id,
+                    KnowledgeDocument.id.in_(doc_ids),
+                    KnowledgeDocument.status == "published",
+                )
+            )
+        )
+        by_id = {d.id: d for d in docs}
+        ordered = [by_id[i] for i in doc_ids if i in by_id]
+        if ordered:
+            return ordered
+
+    # ILIKE fallback
+    like = f"%{q[:80]}%"
     result = await db.scalars(
         select(KnowledgeDocument)
         .where(
@@ -643,6 +702,42 @@ async def search_knowledge(
         .limit(limit)
     )
     return list(result)
+
+
+async def reindex_knowledge_document(
+    db: AsyncSession, document: KnowledgeDocument
+) -> int:
+    """Replace chunks + embeddings for a knowledge document."""
+    from app.models.knowledge_chunk import KnowledgeChunk
+    from app.services.embeddings import chunk_text, embed_text
+
+    existing = await db.scalars(
+        select(KnowledgeChunk).where(KnowledgeChunk.document_id == document.id)
+    )
+    for row in existing:
+        await db.delete(row)
+    await db.flush()
+
+    text = f"{document.name}\n{document.summary or ''}\n{document.content}"
+    pieces = chunk_text(text)
+    count = 0
+    for idx, piece in enumerate(pieces):
+        emb, model = await embed_text(piece)
+        db.add(
+            KnowledgeChunk(
+                organization_id=document.organization_id,
+                document_id=document.id,
+                chunk_index=idx,
+                content=piece,
+                embedding=emb,
+                embedding_model=model,
+                token_estimate=max(1, len(piece) // 4),
+            )
+        )
+        count += 1
+    document.embedding_ref = f"chunks:{count}"
+    await db.flush()
+    return count
 
 
 async def get_knowledge(
@@ -689,6 +784,7 @@ async def create_knowledge(
     )
     db.add(row)
     await db.flush()
+    await reindex_knowledge_document(db, row)
     await write_audit_log(
         db,
         organization_id=organization_id,
@@ -728,6 +824,8 @@ async def update_knowledge(
         elif value is not None and hasattr(row, key):
             setattr(row, key, value)
     await db.flush()
+    if any(k in data for k in ("name", "summary", "content", "status")):
+        await reindex_knowledge_document(db, row)
     await write_audit_log(
         db,
         organization_id=organization_id,

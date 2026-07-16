@@ -2,8 +2,8 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { FormEvent, useState } from "react";
-import { api, APP_NAME } from "@/lib/api";
+import { FormEvent, useEffect, useState } from "react";
+import { api, APP_NAME, type PublicBranding } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
 import { Input, Label } from "@/components/ui/input";
@@ -19,6 +19,27 @@ export default function LoginPage() {
   const [mfaRequired, setMfaRequired] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [branding, setBranding] = useState<PublicBranding | null>(null);
+
+  useEffect(() => {
+    const slug = organizationSlug.trim().toLowerCase();
+    if (slug.length < 2) {
+      setBranding(null);
+      return;
+    }
+    const handle = setTimeout(() => {
+      void api
+        .getPublicBranding(slug)
+        .then((b) => setBranding(b.is_enabled ? b : null))
+        .catch(() => setBranding(null));
+    }, 350);
+    return () => clearTimeout(handle);
+  }, [organizationSlug]);
+
+  const productName = branding?.product_name || APP_NAME;
+  const tagline =
+    branding?.tagline || "Sign in to your organization workspace.";
+  const primary = branding?.primary_color || "#0F766E";
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
@@ -41,7 +62,11 @@ export default function LoginPage() {
         organization_id: tokens.user.primary_organization_id,
       });
       setUser(tokens.user);
-      router.push("/app");
+      if (tokens.user.must_change_password) {
+        router.push("/app/settings?changePassword=1");
+      } else {
+        router.push("/app");
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to sign in");
     } finally {
@@ -50,10 +75,27 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-[radial-gradient(ellipse_at_top,_#ccfbf1_0%,_#fafaf9_45%)] px-4 dark:bg-[radial-gradient(ellipse_at_top,_#134e4a_0%,_#0c0a09_50%)]">
+    <div
+      className="flex min-h-screen items-center justify-center px-4"
+      style={{
+        background: branding?.login_background_url
+          ? `linear-gradient(rgba(15,23,42,0.45), rgba(15,23,42,0.55)), url(${branding.login_background_url}) center/cover`
+          : `radial-gradient(ellipse at top, ${primary}33 0%, #fafaf9 45%)`,
+      }}
+    >
       <Card className="animate-fade-up w-full max-w-md">
-        <CardTitle className="font-display text-2xl">{APP_NAME}</CardTitle>
-        <CardDescription>Sign in to your organization workspace.</CardDescription>
+        {branding?.logo_url ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={branding.logo_url}
+            alt={productName}
+            className="mb-3 h-10 w-auto object-contain"
+          />
+        ) : null}
+        <CardTitle className="font-display text-2xl" style={{ color: primary }}>
+          {productName}
+        </CardTitle>
+        <CardDescription>{tagline}</CardDescription>
         <form className="mt-6 space-y-4" onSubmit={onSubmit}>
           <div>
             <Label htmlFor="email">Work email</Label>
@@ -103,16 +145,29 @@ export default function LoginPage() {
               {error}
             </p>
           )}
-          <Button className="w-full" disabled={loading} type="submit">
+          <Button
+            className="w-full"
+            disabled={loading}
+            type="submit"
+            style={{ backgroundColor: primary }}
+          >
             {loading ? "Signing in…" : "Sign in"}
           </Button>
         </form>
         <p className="mt-4 text-sm text-stone-500">
+          <Link className="text-teal-700 underline dark:text-teal-300" href="/forgot-password">
+            Forgot password?
+          </Link>
+        </p>
+        <p className="mt-2 text-sm text-stone-500">
           New organization?{" "}
           <Link className="text-teal-700 underline dark:text-teal-300" href="/register">
             Create workspace
           </Link>
         </p>
+        {branding && !branding.hide_powered_by ? (
+          <p className="mt-4 text-center text-xs text-stone-400">Powered by ImpactFlow AI</p>
+        ) : null}
       </Card>
     </div>
   );

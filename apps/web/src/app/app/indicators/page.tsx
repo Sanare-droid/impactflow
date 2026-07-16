@@ -24,6 +24,11 @@ export default function IndicatorsPage() {
     queryFn: () => api.listIndicators(),
   });
 
+  const progress = useQuery({
+    queryKey: ["indicators-progress"],
+    queryFn: () => api.indicatorProgress(),
+  });
+
   const create = useMutation({
     mutationFn: () =>
       api.createIndicator({
@@ -172,6 +177,54 @@ export default function IndicatorsPage() {
       </div>
 
       {error && <p className="text-sm text-rose-600">{error}</p>}
+
+      <Card>
+        <CardTitle>Targets vs actuals</CardTitle>
+        <CardDescription>Latest monitoring value against the newest target.</CardDescription>
+        <div className="mt-4 overflow-x-auto">
+          <table className="w-full min-w-[640px] text-left text-sm">
+            <thead className="border-b border-stone-200 text-stone-500 dark:border-stone-800">
+              <tr>
+                <th className="pb-3 font-medium">Indicator</th>
+                <th className="pb-3 font-medium">Target</th>
+                <th className="pb-3 font-medium">Actual</th>
+                <th className="pb-3 font-medium">Progress</th>
+              </tr>
+            </thead>
+            <tbody>
+              {(progress.data?.items.length ?? 0) === 0 && (
+                <tr>
+                  <td className="py-4 text-stone-400" colSpan={4}>
+                    No progress data yet.
+                  </td>
+                </tr>
+              )}
+              {progress.data?.items.map((row) => (
+                <tr
+                  key={row.indicator_id}
+                  className="border-b border-stone-100 last:border-0 dark:border-stone-900"
+                >
+                  <td className="py-3">
+                    <p className="font-medium">{row.name}</p>
+                    <p className="font-mono text-xs text-stone-500">{row.code}</p>
+                  </td>
+                  <td className="py-3">
+                    {row.target_value ?? "—"}
+                    {row.unit ? ` ${row.unit}` : ""}
+                  </td>
+                  <td className="py-3">
+                    {row.actual_value ?? "—"}
+                    {row.unit ? ` ${row.unit}` : ""}
+                  </td>
+                  <td className="py-3">
+                    {row.progress_pct != null ? `${row.progress_pct}%` : "—"}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </Card>
 
       <Card>
         <CardTitle>Indicator register</CardTitle>

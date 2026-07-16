@@ -81,8 +81,12 @@ def _fernet() -> Fernet:
     try:
         return Fernet(key)
     except Exception:
+        if settings.is_production:
+            raise RuntimeError(
+                "ENCRYPTION_KEY must be a valid Fernet key in production"
+            ) from None
         # Stable local-dev fallback derived from JWT secret when ENCRYPTION_KEY
-        # is not yet a valid Fernet key. Replace ENCRYPTION_KEY in production.
+        # is not yet a valid Fernet key.
         digest = hashlib.sha256(settings.jwt_secret_key.encode()).digest()
         import base64
 

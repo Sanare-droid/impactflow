@@ -2,7 +2,7 @@
   "expo": {
     "name": "ImpactFlow Field",
     "slug": "impactflow-field",
-    "version": "0.6.0",
+    "version": "0.7.0",
     "orientation": "portrait",
     "scheme": "impactflow",
     "userInterfaceStyle": "automatic",
@@ -17,7 +17,7 @@
         "backgroundColor": "#0F766E"
       }
     },
-    "plugins": ["expo-router", "expo-secure-store"],
+    "plugins": ["expo-router", "expo-secure-store", "expo-sqlite"],
     "experiments": {
       "typedRoutes": true
     }

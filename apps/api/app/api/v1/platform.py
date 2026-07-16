@@ -27,6 +27,7 @@ from app.schemas import (
     PublicBrandingResponse,
 )
 from app.services import platform as platform_service
+from app.services.rate_limit import enforce_rate_limit
 
 router = APIRouter(tags=["Marketplace & Platform"])
 
@@ -52,8 +53,11 @@ def _require_org(ctx: RequestContext) -> UUID:
 @router.get("/public/branding/{slug}", response_model=PublicBrandingResponse)
 async def public_branding(
     slug: str,
+    request: Request,
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> PublicBrandingResponse:
+    ip = request.client.host if request.client else "unknown"
+    await enforce_rate_limit(key=f"rl:branding:{ip}", limit=60, window_seconds=60)
     data = await platform_service.public_branding_by_slug(db, slug)
     if not data:
         raise NotFoundError("Organization not found")

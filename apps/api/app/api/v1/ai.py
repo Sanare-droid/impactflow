@@ -29,6 +29,7 @@ from app.schemas import (
     PaginationMeta,
 )
 from app.services import ai as ai_service
+from app.services.rate_limit import enforce_rate_limit
 
 router = APIRouter(tags=["AI Copilot"])
 
@@ -120,6 +121,7 @@ async def send_message(
 ) -> AiConversationDetailResponse:
     org_id = _require_org(ctx)
     ip, ua = client_meta(request)
+    await enforce_rate_limit(key=f"rl:ai:msg:{org_id}:{ip}", limit=30, window_seconds=60)
     conv, _user_msg, _assistant = await ai_service.send_message(
         db,
         organization_id=org_id,
@@ -194,6 +196,7 @@ async def generate_prediction(
 ) -> AiPredictionResponse:
     org_id = _require_org(ctx)
     ip, ua = client_meta(request)
+    await enforce_rate_limit(key=f"rl:ai:pred:{org_id}:{ip}", limit=20, window_seconds=60)
     pred = await ai_service.generate_prediction(
         db,
         organization_id=org_id,
@@ -273,6 +276,7 @@ async def generate_narrative(
 ) -> AiNarrativeResponse:
     org_id = _require_org(ctx)
     ip, ua = client_meta(request)
+    await enforce_rate_limit(key=f"rl:ai:nar:{org_id}:{ip}", limit=20, window_seconds=60)
     row = await ai_service.generate_narrative(
         db,
         organization_id=org_id,

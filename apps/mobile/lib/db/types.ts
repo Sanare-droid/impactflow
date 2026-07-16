@@ -1,0 +1,66 @@
+export type SyncStatus = "synced" | "pending" | "failed";
+
+export type LocalBeneficiary = {
+  local_id: string;
+  server_id: string | null;
+  organization_id: string | null;
+  household_local_id: string | null;
+  household_server_id: string | null;
+  community_local_id: string | null;
+  community_server_id: string | null;
+  first_name: string;
+  last_name: string;
+  code: string | null;
+  phone: string | null;
+  status: string;
+  consent_data_use: number;
+  payload_json: string;
+  sync_status: SyncStatus;
+  last_error: string | null;
+  updated_at_local: string;
+  updated_at_server: string | null;
+};
+
+export type LocalCommunity = {
+  local_id: string;
+  server_id: string | null;
+  organization_id: string | null;
+  name: string;
+  code: string | null;
+  community_type: string | null;
+  status: string;
+  payload_json: string;
+  sync_status: SyncStatus;
+  last_error: string | null;
+  updated_at_local: string;
+  updated_at_server: string | null;
+};
+
+export type LocalHousehold = {
+  local_id: string;
+  server_id: string | null;
+  organization_id: string | null;
+  community_local_id: string | null;
+  community_server_id: string | null;
+  name: string;
+  code: string | null;
+  status: string;
+  payload_json: string;
+  sync_status: SyncStatus;
+  last_error: string | null;
+  updated_at_local: string;
+  updated_at_server: string | null;
+};
+
+export type MutationRow = {
+  id: string;
+  entity_type: "community" | "household" | "beneficiary";
+  local_id: string;
+  op: "create" | "update" | "delete";
+  payload_json: string;
+  status: "pending" | "processing" | "failed" | "done";
+  attempts: number;
+  last_error: string | null;
+  created_at: string;
+  updated_at: string;
+};

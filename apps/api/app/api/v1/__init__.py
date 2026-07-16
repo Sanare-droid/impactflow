@@ -8,9 +8,11 @@ from app.api.v1 import (
     finance,
     insights,
     meal,
+    notifications,
     organizations,
     platform,
     programs,
+    surveys,
 )
 
 api_router = APIRouter()
@@ -24,3 +26,5 @@ api_router.include_router(beneficiaries.router)
 api_router.include_router(insights.router)
 api_router.include_router(ai.router)
 api_router.include_router(platform.router)
+api_router.include_router(notifications.router)
+api_router.include_router(surveys.router)

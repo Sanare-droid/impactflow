@@ -6,6 +6,7 @@ import {
   Activity,
   CheckSquare,
   ClipboardCheck,
+  ClipboardList,
   FolderKanban,
   GitBranch,
   HandCoins,
@@ -57,6 +58,12 @@ export default function DashboardPage() {
       value: data?.monitoring_results_count ?? "—",
       icon: Activity,
       href: "/app/monitoring",
+    },
+    {
+      label: "Surveys",
+      value: data?.surveys_count ?? "—",
+      icon: ClipboardList,
+      href: "/app/surveys",
     },
   ];
 
@@ -148,6 +155,10 @@ export default function DashboardPage() {
             <div className="flex justify-between gap-4 border-b border-stone-100 py-2 dark:border-stone-800">
               <dt className="text-stone-500">Indicators</dt>
               <dd className="font-medium">{isLoading ? "…" : data?.indicators_count ?? 0}</dd>
+            </div>
+            <div className="flex justify-between gap-4 border-b border-stone-100 py-2 dark:border-stone-800">
+              <dt className="text-stone-500">Surveys</dt>
+              <dd className="font-medium">{isLoading ? "…" : data?.surveys_count ?? 0}</dd>
             </div>
             <div className="flex justify-between gap-4 py-2">
               <dt className="flex items-center gap-2 text-stone-500">
