@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { FormEvent, useState } from "react";
 import { api, APP_NAME } from "@/lib/api";
+import { BrandLogo } from "@/components/brand-logo";
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
 import { Input, Label } from "@/components/ui/input";
@@ -56,6 +57,7 @@ export default function RegisterPage() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-[radial-gradient(ellipse_at_top,_#fde68a_0%,_#fafaf9_40%)] px-4 py-10 dark:bg-[radial-gradient(ellipse_at_top,_#422006_0%,_#0c0a09_45%)]">
       <Card className="animate-fade-up w-full max-w-xl">
+        <BrandLogo size={52} priority className="mb-3" />
         <CardTitle className="font-display text-2xl">
           Create your {APP_NAME} workspace
         </CardTitle>

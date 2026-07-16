@@ -53,6 +53,7 @@ import {
 import { useTheme } from "next-themes";
 import { useQuery } from "@tanstack/react-query";
 import { APP_NAME, api } from "@/lib/api";
+import { BrandLogo } from "@/components/brand-logo";
 import { useAuth } from "@/providers/auth-provider";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -171,10 +172,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <div className="mx-auto flex min-h-screen max-w-[1400px]">
         <aside className="sticky top-0 hidden h-screen w-64 shrink-0 flex-col overflow-hidden border-r border-stone-200/70 bg-white/60 p-4 backdrop-blur-xl dark:border-stone-800 dark:bg-stone-950/50 md:flex">
           <Link href="/app" className="mb-6 shrink-0 px-2">
-            <div className="font-display text-xl font-semibold tracking-tight text-teal-900 dark:text-teal-100">
-              {APP_NAME}
-            </div>
-            <p className="mt-1 text-xs text-stone-500">MEAL Operating System</p>
+            <BrandLogo
+              size={40}
+              priority
+              withWordmark
+              wordmark={APP_NAME}
+              wordmarkClassName="text-lg leading-tight"
+            />
+            <p className="mt-1.5 text-xs text-stone-500">MEAL Operating System</p>
           </Link>
 
           <nav className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto overscroll-contain pr-1 [-ms-overflow-style:auto] [scrollbar-gutter:stable] [scrollbar-width:thin]">
@@ -260,9 +265,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
         <main id="main-content" className="flex-1 p-4 md:p-8" tabIndex={-1}>
           <div className="mb-6 flex items-center justify-between md:hidden">
-            <div className="font-display text-lg font-semibold text-teal-900 dark:text-teal-100">
-              {APP_NAME}
-            </div>
+            <BrandLogo size={32} withWordmark wordmark={APP_NAME} wordmarkClassName="text-base" />
             <div className="flex items-center gap-1">
               <Button
                 variant="ghost"

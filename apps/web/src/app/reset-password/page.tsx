@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { FormEvent, Suspense, useState } from "react";
 import { api, APP_NAME } from "@/lib/api";
+import { BrandLogo } from "@/components/brand-logo";
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
 import { Input, Label } from "@/components/ui/input";
@@ -37,6 +38,7 @@ function ResetPasswordForm() {
 
   return (
     <Card className="animate-fade-up w-full max-w-md">
+      <BrandLogo size={48} priority className="mb-3" />
       <CardTitle className="font-display text-2xl">{APP_NAME}</CardTitle>
       <CardDescription>Choose a new password for your account.</CardDescription>
       <form className="mt-6 space-y-4" onSubmit={onSubmit}>

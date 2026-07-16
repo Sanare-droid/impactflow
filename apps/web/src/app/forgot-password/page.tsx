@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { FormEvent, useState } from "react";
 import { api, APP_NAME } from "@/lib/api";
+import { BrandLogo } from "@/components/brand-logo";
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
 import { Input, Label } from "@/components/ui/input";
@@ -31,6 +32,7 @@ export default function ForgotPasswordPage() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-[radial-gradient(ellipse_at_top,_#ccfbf1_0%,_#fafaf9_45%)] px-4 dark:bg-[radial-gradient(ellipse_at_top,_#134e4a_0%,_#0c0a09_50%)]">
       <Card className="animate-fade-up w-full max-w-md">
+        <BrandLogo size={48} priority className="mb-3" />
         <CardTitle className="font-display text-2xl">{APP_NAME}</CardTitle>
         <CardDescription>Request a password reset link.</CardDescription>
         <form className="mt-6 space-y-4" onSubmit={onSubmit}>

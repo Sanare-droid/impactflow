@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { FormEvent, useEffect, useState } from "react";
 import { api, APP_NAME, type PublicBranding } from "@/lib/api";
+import { BrandLogo } from "@/components/brand-logo";
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
 import { Input, Label } from "@/components/ui/input";
@@ -89,9 +90,11 @@ export default function LoginPage() {
           <img
             src={branding.logo_url}
             alt={productName}
-            className="mb-3 h-10 w-auto object-contain"
+            className="mb-3 h-12 w-auto object-contain"
           />
-        ) : null}
+        ) : (
+          <BrandLogo size={56} priority className="mb-3" />
+        )}
         <CardTitle className="font-display text-2xl" style={{ color: primary }}>
           {productName}
         </CardTitle>
