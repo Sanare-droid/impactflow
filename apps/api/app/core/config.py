@@ -94,11 +94,11 @@ class Settings(BaseSettings):
 
     @property
     def email_from(self) -> str:
-        return (
-            (self.smtp_from or "").strip()
-            or (self.smtp_user or "").strip()
-            or "ImpactFlow <onboarding@resend.dev>"
-        )
+        from_addr = (self.smtp_from or "").strip()
+        if from_addr and from_addr.lower() != "resend":
+            return from_addr
+        # SMTP_USER for Resend is literally "resend" — not a valid From
+        return "ImpactFlow <onboarding@resend.dev>"
 
     @field_validator("backend_cors_origins", mode="before")
     @classmethod

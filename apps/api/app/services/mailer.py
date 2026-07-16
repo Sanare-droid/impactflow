@@ -134,17 +134,28 @@ async def _send_smtp(
         if html:
             msg.add_alternative(html, subtype="html")
         host = settings.smtp_host
-        port = settings.smtp_port
-        if settings.smtp_use_tls:
+        port = int(settings.smtp_port or 587)
+        user = (settings.smtp_user or "").strip()
+        password = settings.smtp_password or ""
+        # 465 / 2465 = implicit SSL; 587 / 2587 = STARTTLS
+        use_ssl = port in {465, 2465}
+        if use_ssl:
+            with smtplib.SMTP_SSL(host, port, timeout=30) as server:
+                if user:
+                    server.login(user, password)
+                server.send_message(msg)
+        elif settings.smtp_use_tls:
             with smtplib.SMTP(host, port, timeout=30) as server:
+                server.ehlo()
                 server.starttls()
-                if settings.smtp_user:
-                    server.login(settings.smtp_user, settings.smtp_password)
+                server.ehlo()
+                if user:
+                    server.login(user, password)
                 server.send_message(msg)
         else:
             with smtplib.SMTP(host, port, timeout=30) as server:
-                if settings.smtp_user:
-                    server.login(settings.smtp_user, settings.smtp_password)
+                if user:
+                    server.login(user, password)
                 server.send_message(msg)
 
     await asyncio.to_thread(_send)
