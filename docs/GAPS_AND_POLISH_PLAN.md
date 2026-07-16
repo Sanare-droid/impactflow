@@ -175,8 +175,8 @@ flowchart LR
 
 ---
 
-## Inventory notes (as of Epic 4 / API 0.16)
+## Inventory notes (as of Epic 5 / API 0.17)
 
-**Exists:** Full A–E stack, Epics 1–3, plus Epic 4 Field Operations (`docs/EPIC4_FIELD_OPS.md`): batch sync API, device management, mobile design system revamp (v1.0.0), field ops web dashboard at `/app/field-operations`.
+**Exists:** Full A–E stack, Epics 1–4, plus Epic 5 Executive Analytics & Donor Reporting (`docs/EPIC5_EXECUTIVE.md`): executive dashboard, portfolio/impact/compliance/risk APIs, report templates + versions, multi-format exports, AI briefs via existing Copilot.
 
-**Deferred:** Push notifications, encrypted SQLite, offline maps, binary media object storage, biometric unlock.
+**Deferred:** Native PDF binary engine, push notifications, encrypted SQLite, offline maps, OAuth integrations.

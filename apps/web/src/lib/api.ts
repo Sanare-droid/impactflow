@@ -485,6 +485,278 @@ export type Report = {
   updated_at: string;
 };
 
+/** Epic 5 — executive analytics & donor reporting */
+
+export type PortfolioHealth = {
+  score: number;
+  band: "healthy" | "watch" | "at_risk" | string;
+  components: {
+    delivery: number;
+    indicators: number;
+    budget: number;
+    grants: number;
+    risk_penalty: number;
+  };
+};
+
+export type ExecutiveKpis = {
+  active_programs: number;
+  active_projects: number;
+  open_tasks: number;
+  grant_pipeline: number;
+  active_grants: number;
+  budget_utilization_pct: number;
+  grants_awarded_total: number;
+  expenses_total: number;
+  indicator_on_track: number;
+  indicator_total: number;
+  beneficiary_reach: number;
+  active_beneficiaries: number;
+  communities_reached: number;
+  project_completion_pct: number;
+  surveys_count: number;
+  published_surveys_count: number;
+  indicators_count: number;
+  female?: number;
+  male?: number;
+  other?: number;
+  unknown?: number;
+  youth_reach?: number;
+  persons_with_disabilities?: number;
+  evidence_verified?: number | null;
+};
+
+export type RiskHeatItem = {
+  type?: string;
+  title?: string;
+  severity?: string;
+  summary?: string;
+  suggested_action?: string;
+};
+
+export type ExecutiveDeadlineGrant = {
+  id: string;
+  name: string;
+  code: string;
+  end_date?: string | null;
+  status: string;
+};
+
+export type ExecutiveDeadlineTask = {
+  id: string;
+  title: string;
+  due_date?: string | null;
+  priority?: string;
+  status: string;
+};
+
+export type ExecutiveReportBrief = {
+  id: string;
+  name: string;
+  code: string;
+  report_type: string;
+  status: string;
+  updated_at?: string | null;
+};
+
+export type ExecutiveQuickAction = {
+  label: string;
+  href: string;
+  action: string;
+};
+
+export type ExecutiveDashboard = {
+  generated_at: string;
+  filters: { program_id?: string | null; project_id?: string | null };
+  portfolio_health: PortfolioHealth;
+  kpis: ExecutiveKpis;
+  indicator_performance: IndicatorProgressRow[];
+  indicators_behind: IndicatorProgressRow[];
+  upcoming_deadlines: {
+    grants_expiring: ExecutiveDeadlineGrant[];
+    overdue_tasks: ExecutiveDeadlineTask[];
+  };
+  risk_heat: RiskHeatItem[];
+  field_operations?: Record<string, unknown>;
+  ai_insights: {
+    summary?: string | null;
+    key_risks?: RiskHeatItem[];
+    recommendations?: string[];
+    wins?: string[];
+  };
+  latest_reports: ExecutiveReportBrief[];
+  quick_actions: ExecutiveQuickAction[];
+  citations: { source: string; metric?: string }[];
+};
+
+export type ChartBar = { label: string; value: number };
+
+export type ExecutivePortfolio = {
+  generated_at: string;
+  filters: Record<string, string | null | undefined>;
+  program_performance: Record<string, number>;
+  grant_performance: Record<string, number>;
+  beneficiary_trends: {
+    total: number;
+    active: number;
+    gender: Record<string, number>;
+  };
+  indicator_trends: {
+    id?: string;
+    name?: string;
+    progress_pct?: number | null;
+    actual?: unknown;
+    target?: unknown;
+    on_track?: boolean;
+  }[];
+  survey_completion: { surveys: number; submitted_responses: number };
+  evidence_collection: {
+    total: number;
+    verified: number;
+    verification_pct: number;
+  };
+  efficiency: {
+    cost_per_beneficiary: number;
+    budget_utilization_pct: number;
+  };
+  charts: {
+    indicator_progress_bar: ChartBar[];
+    gender_donut: ChartBar[];
+    budget_utilization: ChartBar[];
+  };
+  citations: { source: string }[];
+};
+
+export type ExecutiveImpact = {
+  generated_at: string;
+  outputs_tracked: number;
+  outcomes_tracked: number;
+  indicators_on_track: number;
+  indicators_total: number;
+  cost_per_beneficiary: number;
+  program_efficiency_pct: number;
+  grant_efficiency_pct: number;
+  beneficiary_reach: number;
+  variances: {
+    id?: string;
+    name?: string;
+    baseline?: unknown;
+    target?: number;
+    actual?: number;
+    variance?: number;
+    progress_pct?: number | null;
+  }[];
+  citations: { source: string }[];
+};
+
+export type ComplianceRecommendation = {
+  why: string;
+  action: string;
+  severity: string;
+  href?: string;
+};
+
+export type ComplianceIssue = {
+  category: string;
+  title: string;
+  severity: string;
+  detail?: string | null;
+};
+
+export type ExecutiveCompliance = {
+  generated_at: string;
+  summary: {
+    draft_reports: number;
+    reports_in_review: number;
+    missing_indicator_actuals: number;
+    indicators_behind: number;
+    survey_gaps: number;
+    evidence_pending: number;
+    grants_ending_soon: number;
+    open_risk_signals: number;
+  };
+  issues: ComplianceIssue[];
+  recommendations: ComplianceRecommendation[];
+  risk_signals: RiskHeatItem[];
+  citations: { source: string }[];
+};
+
+export type ExecutiveRiskItem = {
+  type?: string;
+  title?: string;
+  severity?: string;
+  summary?: string;
+  reason?: string;
+  suggested_action?: string;
+  responsible_role?: string;
+  recommended_deadline_days?: number;
+};
+
+export type ExecutiveRisks = {
+  generated_at: string;
+  total: number;
+  by_severity: Record<string, number>;
+  items: ExecutiveRiskItem[];
+  citations: { source: string }[];
+};
+
+export type ExecutiveBriefResponse = {
+  audience: string;
+  narrative: AiReport | Record<string, unknown>;
+  report: Report | null;
+};
+
+export type ReportTemplate = {
+  id?: string;
+  organization_id?: string | null;
+  name: string;
+  code: string;
+  description?: string | null;
+  category: string;
+  report_type: string;
+  narrative_style?: string;
+  sections?: { id: string; title: string; required?: boolean }[];
+  required_metrics?: string[];
+  branding?: Record<string, unknown>;
+  export_preferences?: Record<string, unknown>;
+  is_system?: boolean;
+  status?: string;
+  cloned_from_id?: string | null;
+};
+
+export type ClonedReportTemplate = {
+  id: string;
+  name: string;
+  code: string;
+  category: string;
+  sections?: unknown[];
+};
+
+export type ReportVersion = {
+  id: string;
+  organization_id: string;
+  report_id: string;
+  version: number;
+  title: string;
+  summary?: string | null;
+  content?: string | null;
+  sections?: unknown[];
+  changelog?: string | null;
+  status: string;
+  citations?: unknown[];
+  created_at?: string | null;
+};
+
+export type ReportExportFormat =
+  | "markdown"
+  | "html"
+  | "pdf"
+  | "csv"
+  | "xlsx"
+  | "excel"
+  | "docx"
+  | "pptx";
+
 export type SavedDashboard = {
   id: string;
   organization_id: string;
@@ -2562,6 +2834,152 @@ class ApiClient {
     if (params.page) q.set("page", String(params.page));
     if (params.status) q.set("status", params.status);
     return this.request<Paginated<MediaUploadRecord>>(`/media/uploads?${q}`);
+  }
+
+  // ------------------------------------------------------------------------- //
+  // Executive analytics & donor reporting (Epic 5)
+  // ------------------------------------------------------------------------- //
+
+  executiveDashboard(params: { program_id?: string; project_id?: string } = {}) {
+    const q = new URLSearchParams();
+    if (params.program_id) q.set("program_id", params.program_id);
+    if (params.project_id) q.set("project_id", params.project_id);
+    const qs = q.toString();
+    return this.request<ExecutiveDashboard>(
+      `/executive/dashboard${qs ? `?${qs}` : ""}`,
+    );
+  }
+
+  executivePortfolio(
+    params: {
+      program_id?: string;
+      project_id?: string;
+      grant_id?: string;
+    } = {},
+  ) {
+    const q = new URLSearchParams();
+    if (params.program_id) q.set("program_id", params.program_id);
+    if (params.project_id) q.set("project_id", params.project_id);
+    if (params.grant_id) q.set("grant_id", params.grant_id);
+    const qs = q.toString();
+    return this.request<ExecutivePortfolio>(
+      `/executive/portfolio${qs ? `?${qs}` : ""}`,
+    );
+  }
+
+  executiveImpact() {
+    return this.request<ExecutiveImpact>("/executive/impact");
+  }
+
+  executiveCompliance() {
+    return this.request<ExecutiveCompliance>("/executive/compliance");
+  }
+
+  executiveRisks() {
+    return this.request<ExecutiveRisks>("/executive/risks");
+  }
+
+  createExecutiveBrief(body: {
+    audience?: string;
+    program_id?: string;
+    project_id?: string;
+    save_as_report?: boolean;
+  }) {
+    return this.request<ExecutiveBriefResponse>("/executive/briefs", {
+      method: "POST",
+      body: JSON.stringify(body),
+    });
+  }
+
+  listReportTemplates(params: { category?: string; page?: number } = {}) {
+    const q = new URLSearchParams({ page_size: "50" });
+    if (params.category) q.set("category", params.category);
+    if (params.page) q.set("page", String(params.page));
+    return this.request<Paginated<ReportTemplate>>(`/report-templates?${q}`);
+  }
+
+  cloneReportTemplate(body: {
+    code?: string;
+    template_id?: string;
+    name?: string;
+  }) {
+    return this.request<ClonedReportTemplate>("/report-templates/clone", {
+      method: "POST",
+      body: JSON.stringify(body),
+    });
+  }
+
+  buildReport(body: {
+    name: string;
+    template_code?: string;
+    template_id?: string;
+    report_type?: string;
+    program_id?: string;
+    project_id?: string;
+    grant_id?: string;
+    period_start?: string;
+    period_end?: string;
+    generate_narrative?: boolean;
+    narrative_type?: string;
+    save_version?: boolean;
+  }) {
+    return this.request<Report>("/reports/build", {
+      method: "POST",
+      body: JSON.stringify(body),
+    });
+  }
+
+  listReportVersions(reportId: string) {
+    return this.request<{ items: ReportVersion[] }>(
+      `/reports/${reportId}/versions`,
+    );
+  }
+
+  createReportVersion(
+    reportId: string,
+    body: { changelog?: string; citations?: Record<string, unknown>[] } = {},
+  ) {
+    return this.request<ReportVersion>(`/reports/${reportId}/versions`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    });
+  }
+
+  approveReport(reportId: string) {
+    return this.request<Report>(`/reports/${reportId}/approve`, {
+      method: "POST",
+    });
+  }
+
+  publishReport(reportId: string) {
+    return this.request<Report>(`/reports/${reportId}/publish`, {
+      method: "POST",
+    });
+  }
+
+  async downloadReportExport(
+    reportId: string,
+    format: ReportExportFormat,
+    filename?: string,
+  ): Promise<void> {
+    const headers = new Headers();
+    if (this.accessToken) headers.set("Authorization", `Bearer ${this.accessToken}`);
+    if (this.organizationId) headers.set("X-Organization-Id", this.organizationId);
+    const res = await fetch(
+      `${API_V1}/reports/${reportId}/export/download?format=${encodeURIComponent(format)}`,
+      { headers },
+    );
+    if (!res.ok) throw new Error("Export download failed");
+    const blob = await res.blob();
+    const cd = res.headers.get("Content-Disposition");
+    const match = cd?.match(/filename="?([^"]+)"?/i);
+    const name = filename ?? match?.[1] ?? `report.${format === "markdown" ? "md" : format}`;
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = name;
+    a.click();
+    URL.revokeObjectURL(url);
   }
 }
 

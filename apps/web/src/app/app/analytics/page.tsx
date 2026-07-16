@@ -1,8 +1,11 @@
 "use client";
 
+import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
+import { ArrowRight, Gauge } from "lucide-react";
 import { api } from "@/lib/api";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 
 function MetricGrid({
   title,
@@ -44,11 +47,20 @@ export default function AnalyticsPage() {
 
   return (
     <div className="animate-fade-up space-y-6">
-      <div>
-        <h1 className="font-display text-3xl font-semibold tracking-tight">Analytics</h1>
-        <p className="mt-2 text-stone-500">
-          Cross-module overview for delivery, finance, MEAL, and field operations.
-        </p>
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <h1 className="font-display text-3xl font-semibold tracking-tight">Analytics</h1>
+          <p className="mt-2 text-stone-500">
+            Cross-module overview for delivery, finance, MEAL, and field operations.
+          </p>
+        </div>
+        <Link href="/app/executive">
+          <Button variant="secondary">
+            <Gauge className="h-4 w-4" />
+            Executive dashboard
+            <ArrowRight className="h-3.5 w-3.5" />
+          </Button>
+        </Link>
       </div>
 
       {error && (

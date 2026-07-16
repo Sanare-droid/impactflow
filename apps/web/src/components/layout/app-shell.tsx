@@ -43,6 +43,7 @@ import {
   Bell,
   ClipboardList,
   Workflow,
+  Gauge,
   type LucideIcon,
 } from "lucide-react";
 import { useTheme } from "next-themes";
@@ -103,6 +104,7 @@ const navGroups: NavGroup[] = [
   {
     label: "Insights",
     items: [
+      { href: "/app/executive", label: "Executive", icon: Gauge },
       { href: "/app/reports", label: "Reports", icon: FileText },
       { href: "/app/analytics", label: "Analytics", icon: BarChart3 },
       { href: "/app/dashboards", label: "Dashboards", icon: LayoutPanelTop },

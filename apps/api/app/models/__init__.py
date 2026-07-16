@@ -29,6 +29,7 @@ from app.models.program import Program
 from app.models.project import Project
 from app.models.refresh_token import RefreshToken
 from app.models.report import Report
+from app.models.report_template import ReportTemplate, ReportVersion
 from app.models.role import Role
 from app.models.saved_dashboard import SavedDashboard
 from app.models.survey import (
@@ -92,6 +93,8 @@ __all__ = [
     "Beneficiary",
     "BeneficiaryMembership",
     "Report",
+    "ReportTemplate",
+    "ReportVersion",
     "SavedDashboard",
     "MapLayer",
     "MapFeature",

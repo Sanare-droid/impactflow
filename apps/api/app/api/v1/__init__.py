@@ -5,6 +5,7 @@ from app.api.v1 import (
     auth,
     beneficiaries,
     dashboard,
+    executive,
     field_ops,
     finance,
     insights,
@@ -32,3 +33,4 @@ api_router.include_router(notifications.router)
 api_router.include_router(surveys.router)
 api_router.include_router(workflows.router)
 api_router.include_router(field_ops.router)
+api_router.include_router(executive.router)
