@@ -1823,33 +1823,46 @@ class ApiClient {
       headers.set("X-Organization-Id", this.organizationId);
     }
 
-    const res = await fetch(`${API_V1}${path}`, {
-      ...options,
-      headers,
-    });
+    try {
+      const res = await fetch(`${API_V1}${path}`, {
+        ...options,
+        headers,
+      });
 
-    if (res.status === 401 && retry && this.refreshToken) {
-      const refreshed = await this.refresh();
-      if (refreshed) {
-        return this.request<T>(path, options, false);
+      if (res.status === 401 && retry && this.refreshToken) {
+        const refreshed = await this.refresh();
+        if (refreshed) {
+          return this.request<T>(path, options, false);
+        }
+        this.clearSession();
       }
-      this.clearSession();
-    }
 
-    if (!res.ok) {
-      let error: ApiError = { message: res.statusText };
-      try {
-        error = await res.json();
-      } catch {
-        /* ignore */
+      if (!res.ok) {
+        let error: ApiError = { message: res.statusText };
+        try {
+          error = await res.json();
+        } catch {
+          /* ignore */
+        }
+        throw new Error(error.message || "Request failed");
       }
-      throw new Error(error.message || "Request failed");
-    }
 
-    if (res.status === 204) {
-      return undefined as T;
+      if (res.status === 204) {
+        return undefined as T;
+      }
+      return res.json() as Promise<T>;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "";
+      const unreachable =
+        err instanceof TypeError ||
+        /failed to fetch|networkerror|load failed|network request failed/i.test(msg);
+      if (unreachable) {
+        throw new Error(
+          `Cannot reach the API at ${API_URL}. Set NEXT_PUBLIC_API_URL on Netlify to your Railway API URL, and ensure BACKEND_CORS_ORIGINS includes this site.`,
+        );
+      }
+      throw err;
     }
-    return res.json() as Promise<T>;
   }
 
   async refresh(): Promise<boolean> {

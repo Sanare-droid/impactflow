@@ -62,7 +62,11 @@ python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().d
 | `REDIS_URL` | From Redis plugin |
 | `FRONTEND_URL` | `https://YOUR-SITE.netlify.app` (update after Netlify deploy) |
 | `BACKEND_CORS_ORIGINS` | `["https://YOUR-SITE.netlify.app"]` exact JSON array |
+| `SUPERADMIN_EMAIL` | optional — platform superadmin email (created on boot) |
+| `SUPERADMIN_PASSWORD` | optional — 12+ chars; pairs with SUPERADMIN_EMAIL |
 | `OPENAI_API_KEY` | optional |
+
+Netlify deploy URLs (`*.netlify.app`) are also allowed via `BACKEND_CORS_ORIGIN_REGEX` by default.
 
 Start command is already in the root `Dockerfile`:
 
@@ -134,7 +138,8 @@ If you add a custom domain later, add that origin too.
 | Railpack: “could not determine how to build” listing `./apps`, `docs` | Builder at **repo root** without Docker config | Use committed `railway.toml` + root `Dockerfile`, or set root dir `apps/api` |
 | Railpack: “Script start.sh not found” | Same — wrong builder | Switch to Dockerfile builder |
 | Netlify: `(index):1 404` | Static deploy / wrong base / no Next plugin | Use `netlify.toml`; redeploy |
-| API CORS errors in browser | `BACKEND_CORS_ORIGINS` missing Netlify origin | Update + restart API |
+| API CORS errors in browser | `BACKEND_CORS_ORIGINS` missing Netlify origin | Update + restart API (or rely on `*.netlify.app` regex) |
+| `Failed to fetch` / cannot reach API | Web still on localhost API or wrong URL | Set `NEXT_PUBLIC_API_URL` to Railway HTTPS URL and **redeploy Netlify** |
 | `/ready` database false | Bad `DATABASE_URL` or no PostGIS | Fix URL scheme + `CREATE EXTENSION postgis` |
 | Login works locally only | Web still pointing at localhost API | Rebuild Netlify with correct `NEXT_PUBLIC_API_URL` |
 

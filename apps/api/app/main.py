@@ -49,6 +49,19 @@ async def lifespan(_app: FastAPI):
         # DB may be unavailable at import/test time; migrations handle schema.
         pass
 
+    if settings.superadmin_email and settings.superadmin_password:
+        try:
+            from app.scripts.seed_superadmin import ensure_superadmin
+
+            await ensure_superadmin(
+                email=settings.superadmin_email,
+                password=settings.superadmin_password,
+                first_name=settings.superadmin_first_name,
+                last_name=settings.superadmin_last_name,
+            )
+        except Exception:
+            logger.exception("superadmin.bootstrap_failed")
+
     stop = asyncio.Event()
     task = None
     if settings.jobs_enabled and not settings.app_env.lower().startswith("test"):
@@ -77,6 +90,7 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.backend_cors_origins,
+    allow_origin_regex=settings.backend_cors_origin_regex or None,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

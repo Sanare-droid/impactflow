@@ -23,6 +23,14 @@ class Settings(BaseSettings):
     backend_cors_origins: List[str] = Field(
         default_factory=lambda: ["http://localhost:3000"]
     )
+    # Extra browser origins (Netlify deploy previews / production sites)
+    backend_cors_origin_regex: str = r"https://.*\.netlify\.app"
+
+    # Optional bootstrap superadmin (created on API startup if both set)
+    superadmin_email: str = ""
+    superadmin_password: str = ""
+    superadmin_first_name: str = "Platform"
+    superadmin_last_name: str = "Admin"
 
     postgres_host: str = "localhost"
     postgres_port: int = 5432

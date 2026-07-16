@@ -3,12 +3,13 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { FormEvent, useState } from "react";
-import { api, APP_NAME } from "@/lib/api";
+import { API_URL, api, APP_NAME } from "@/lib/api";
 import { BrandLogo } from "@/components/brand-logo";
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
 import { Input, Label } from "@/components/ui/input";
 import { useAuth } from "@/providers/auth-provider";
+import { ORGANIZATION_TYPES } from "@/lib/organization-types";
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -46,7 +47,7 @@ export default function RegisterPage() {
         organization_id: tokens.user.primary_organization_id,
       });
       setUser(tokens.user);
-      router.push("/app");
+      router.push("/app/onboarding");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Registration failed");
     } finally {
@@ -55,9 +56,9 @@ export default function RegisterPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-[radial-gradient(ellipse_at_top,_#fde68a_0%,_#fafaf9_40%)] px-4 py-10 dark:bg-[radial-gradient(ellipse_at_top,_#422006_0%,_#0c0a09_45%)]">
+    <div className="flex min-h-screen items-center justify-center bg-[radial-gradient(ellipse_at_top,_#0f766e33_0%,_#fafaf9_42%)] px-4 py-10 dark:bg-[radial-gradient(ellipse_at_top,_#134e4a_0%,_#0c0a09_45%)]">
       <Card className="animate-fade-up w-full max-w-xl">
-        <BrandLogo size={52} priority className="mb-3" />
+        <BrandLogo size={48} priority className="mb-3" />
         <CardTitle className="font-display text-2xl">
           Create your {APP_NAME} workspace
         </CardTitle>
@@ -84,13 +85,20 @@ export default function RegisterPage() {
             />
           </div>
           <div>
-            <Label htmlFor="type">Type</Label>
-            <Input
+            <Label htmlFor="type">Organization type</Label>
+            <select
               id="type"
+              required
               value={form.organization_type}
               onChange={(e) => update("organization_type", e.target.value)}
-              placeholder="ngo, foundation, government…"
-            />
+              className="flex h-10 w-full rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm text-stone-900 shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500/30 dark:border-stone-700 dark:bg-stone-950 dark:text-stone-100"
+            >
+              {ORGANIZATION_TYPES.map((t) => (
+                <option key={t.value} value={t.value}>
+                  {t.label}
+                </option>
+              ))}
+            </select>
           </div>
           <div>
             <Label htmlFor="first">First name</Label>
@@ -142,9 +150,12 @@ export default function RegisterPage() {
             />
           </div>
           {error && (
-            <p className="md:col-span-2 rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700 dark:bg-rose-950/40 dark:text-rose-300">
-              {error}
-            </p>
+            <div className="md:col-span-2 space-y-1 rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700 dark:bg-rose-950/40 dark:text-rose-300">
+              <p>{error}</p>
+              <p className="text-xs opacity-80">
+                API: <code className="break-all">{API_URL}</code>
+              </p>
+            </div>
           )}
           <div className="md:col-span-2">
             <Button className="w-full" disabled={loading} type="submit">
