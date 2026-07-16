@@ -26,6 +26,14 @@ export const metadata: Metadata = {
   description:
     "ImpactFlow helps development organizations turn field work into clear evidence for the people and donors who depend on them.",
   applicationName: APP_NAME,
+  icons: {
+    icon: [
+      { url: "/favicon.ico", sizes: "any" },
+      { url: "/brand/impactflow-logo.png", type: "image/png", sizes: "512x512" },
+    ],
+    apple: [{ url: "/brand/impactflow-logo.png", sizes: "180x180" }],
+    shortcut: "/favicon.ico",
+  },
   openGraph: {
     type: "website",
     locale: "en_US",

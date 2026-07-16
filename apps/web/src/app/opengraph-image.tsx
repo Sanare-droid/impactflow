@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { ImageResponse } from "next/og";
 
 export const runtime = "nodejs";
-export const alt = "ImpactFlow — MEAL operating system for development organizations";
+export const alt = "ImpactFlow — evidence and impact for development organizations";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
@@ -63,7 +63,7 @@ export default async function OpenGraphImage() {
                 lineHeight: 1.35,
               }}
             >
-              MEAL operating system for development organizations worldwide
+              Clear evidence for the lives your programs change
             </div>
           </div>
         </div>
