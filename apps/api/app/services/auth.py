@@ -571,23 +571,24 @@ async def invite_user(
 
     delivery: dict = {"email_status": "skipped", "send_invite": send_invite}
     if send_invite:
+        from app.services import email_templates
+
         login_url = f"{settings.frontend_url.rstrip('/')}/login"
         if created_new and temp_password:
-            body = (
-                f"You have been invited to ImpactFlow AI.\n\n"
-                f"Email: {user.email}\n"
-                f"Temporary password: {temp_password}\n"
-                f"Sign in: {login_url}\n\n"
-                f"You will be asked to change your password after login."
+            subject, body, html = email_templates.invite_new_user(
+                email=user.email,
+                temporary_password=temp_password,
+                login_url=login_url,
+                first_name=user.first_name or first_name,
             )
-            subject = "Your ImpactFlow AI invitation"
         else:
-            body = (
-                f"You have been added to an organization on ImpactFlow AI.\n\n"
-                f"Sign in with your existing account: {login_url}"
+            subject, body, html = email_templates.invite_existing_user(
+                login_url=login_url,
+                first_name=user.first_name or first_name,
             )
-            subject = "You've been added to an ImpactFlow organization"
-        delivery = await send_email(to=user.email, subject=subject, body=body)
+        delivery = await send_email(
+            to=user.email, subject=subject, body=body, html=html
+        )
         delivery["send_invite"] = True
 
     await write_audit_log(
@@ -698,13 +699,17 @@ async def request_password_reset(
         db.add(token)
         await db.flush()
         reset_url = f"{settings.frontend_url.rstrip('/')}/reset-password?token={raw}"
+        from app.services import email_templates
+
+        subject, body, html = email_templates.password_reset(
+            reset_url=reset_url,
+            first_name=user.first_name or "",
+        )
         await send_email(
             to=user.email,
-            subject="Reset your ImpactFlow password",
-            body=(
-                f"Use this link to reset your password (expires in 1 hour):\n{reset_url}\n\n"
-                f"If you did not request this, ignore this email."
-            ),
+            subject=subject,
+            body=body,
+            html=html,
         )
         await write_audit_log(
             db,
