@@ -55,7 +55,11 @@ Override with `DEMO_ORG_SLUG`, `DEMO_ADMIN_EMAIL`, `DEMO_ADMIN_PASSWORD`.
 | Redis | Managed Redis (rate limiting) |
 | Object storage | S3 / R2 / MinIO |
 
-### Web on Vercel
+### Web on Vercel / Netlify
+
+**Netlify (recommended with Railway):** see [NETLIFY_RAILWAY.md](./NETLIFY_RAILWAY.md). Root `netlify.toml` builds `apps/web`.
+
+**Vercel:**
 
 1. Import the GitHub repo  
 2. Root directory: `apps/web`  
@@ -64,10 +68,12 @@ Override with `DEMO_ORG_SLUG`, `DEMO_ADMIN_EMAIL`, `DEMO_ADMIN_PASSWORD`.
 
 ### API on Railway / Fly
 
-1. Deploy from `apps/api` Dockerfile  
-2. Attach Postgres + Redis  
+**Railway:** root `railway.toml` builds the API via root `Dockerfile` (monorepo-safe). Full steps: [NETLIFY_RAILWAY.md](./NETLIFY_RAILWAY.md).
+
+1. Deploy from GitHub (repo root, Docker builder) **or** Root Directory `apps/api`  
+2. Attach Postgres (PostGIS) + Redis  
 3. Set secrets from the table above  
-4. Run migrations via start command (`alembic upgrade head` already in Compose prod)
+4. Migrations run on container start (`alembic upgrade head`)
 
 ## API key authentication
 

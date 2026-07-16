@@ -1,0 +1,23 @@
+# Netlify — Next.js app in apps/web
+# https://docs.netlify.com/frameworks/next-js/overview/
+
+[build]
+  base = "apps/web"
+  command = "npm run build"
+  publish = ".next"
+
+[build.environment]
+  NODE_VERSION = "20"
+  # Disable Docker-oriented standalone output for Netlify's Next runtime
+  NETLIFY = "true"
+
+[[plugins]]
+  package = "@netlify/plugin-nextjs"
+
+# SPA-style fallback is handled by the Next plugin; keep API calls off-origin.
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Frame-Options = "DENY"
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"

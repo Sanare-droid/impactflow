@@ -1,0 +1,12 @@
+# Railway — deploy the FastAPI API from this monorepo.
+# Dashboard: leave Root Directory empty (repo root) so this file is used.
+# Or set Root Directory to apps/api and use the Dockerfile there instead.
+
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "Dockerfile"
+
+[deploy]
+healthcheckPath = "/health"
+healthcheckTimeout = 30
+restartPolicyType = "ON_FAILURE"
