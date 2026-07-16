@@ -44,6 +44,14 @@ def validate_runtime_secrets() -> None:
         except Exception:
             problems.append("ENCRYPTION_KEY is not a valid Fernet key")
 
+    host = (settings.database_host or "").lower()
+    if settings.is_production and host in {"", "localhost", "127.0.0.1", "::1"}:
+        problems.append(
+            "DATABASE_URL points at localhost — on Railway, link the Postgres "
+            "plugin to this service (Variables → Add reference → Postgres DATABASE_URL). "
+            "Use postgresql+asyncpg://… or postgres://… (auto-normalized)."
+        )
+
     if not problems:
         return
 

@@ -1,8 +1,22 @@
 from functools import lru_cache
 from typing import List
+from urllib.parse import urlparse
 
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+def normalize_database_url(url: str) -> str:
+    """Railway/Heroku provide postgres:// or postgresql:// — SQLAlchemy async needs asyncpg."""
+    raw = (url or "").strip()
+    if not raw:
+        return raw
+    for prefix in ("postgres://", "postgresql://"):
+        if raw.startswith(prefix) and "+asyncpg" not in raw.split("://", 1)[0]:
+            return "postgresql+asyncpg://" + raw[len(prefix) :]
+    if raw.startswith("postgresql+psycopg2://"):
+        return "postgresql+asyncpg://" + raw[len("postgresql+psycopg2://") :]
+    return raw
 
 
 class Settings(BaseSettings):
@@ -89,9 +103,23 @@ class Settings(BaseSettings):
             return [origin.strip() for origin in value.split(",") if origin.strip()]
         return value
 
+    @field_validator("database_url", mode="before")
+    @classmethod
+    def parse_database_url(cls, value: object) -> object:
+        if isinstance(value, str):
+            return normalize_database_url(value)
+        return value
+
     @property
     def is_production(self) -> bool:
         return self.app_env.lower() == "production"
+
+    @property
+    def database_host(self) -> str:
+        try:
+            return urlparse(self.database_url).hostname or ""
+        except Exception:
+            return ""
 
 
 @lru_cache

@@ -5,10 +5,36 @@ from unittest.mock import patch
 import pytest
 from fastapi import FastAPI
 
-from app.core.config import Settings
+from app.core.config import Settings, normalize_database_url
 from app.core.secrets import validate_runtime_secrets
 from app.main import API_VERSION
 from app.main import app as fastapi_app
+
+
+def test_normalize_database_url_railway_schemes():
+    assert normalize_database_url("postgres://u:p@db.example:5432/app").startswith(
+        "postgresql+asyncpg://"
+    )
+    assert normalize_database_url("postgresql://u:p@db.example/app").startswith(
+        "postgresql+asyncpg://"
+    )
+    assert "+asyncpg" in normalize_database_url(
+        "postgresql+asyncpg://u:p@db.example/app"
+    )
+
+
+def test_validate_runtime_secrets_blocks_localhost_db_in_production():
+    from cryptography.fernet import Fernet
+
+    fake = Settings(
+        app_env="production",
+        jwt_secret_key="a" * 48,
+        encryption_key=Fernet.generate_key().decode(),
+        database_url="postgresql+asyncpg://u:p@127.0.0.1:5432/impactflow",
+    )
+    with patch("app.core.secrets.settings", fake):
+        with pytest.raises(RuntimeError, match="DATABASE_URL"):
+            validate_runtime_secrets()
 
 
 def test_openapi_enabled_in_development():

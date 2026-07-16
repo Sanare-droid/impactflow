@@ -45,6 +45,23 @@ Repo helpers:
 
 ### 3. Variables (API service)
 
+**Critical — database must not be localhost.** Your crash
+`Connect call failed ('127.0.0.1', 5432)` means `DATABASE_URL` was missing
+or still the local default.
+
+1. Open the **API** service → **Variables**.
+2. **Add variable** → **Add a reference** (or Shared Variables):
+   - From the Postgres service, reference `DATABASE_URL`
+     (Railway UI often shows `${{Postgres.DATABASE_URL}}`).
+3. Do the same for Redis: reference `REDIS_URL` / `REDIS_PRIVATE_URL`
+   as `REDIS_URL`.
+4. Or paste the Postgres URL manually and ensure the host is the **Railway
+   internal hostname** (e.g. `postgres.railway.internal` or the public proxy host),
+   **not** `localhost` / `127.0.0.1`.
+
+ImpactFlow accepts `postgres://…` and `postgresql://…` and rewrites them to
+`postgresql+asyncpg://…` automatically.
+
 Generate secrets:
 
 ```bash
@@ -58,8 +75,8 @@ python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().d
 | `DEBUG` | `false` |
 | `JWT_SECRET_KEY` | long random string |
 | `ENCRYPTION_KEY` | Fernet key |
-| `DATABASE_URL` | From Postgres plugin — change `postgres://` or `postgresql://` → `postgresql+asyncpg://` |
-| `REDIS_URL` | From Redis plugin |
+| `DATABASE_URL` | **Reference from Postgres plugin** (required) |
+| `REDIS_URL` | **Reference from Redis plugin** (required) |
 | `FRONTEND_URL` | `https://YOUR-SITE.netlify.app` (update after Netlify deploy) |
 | `BACKEND_CORS_ORIGINS` | `["https://YOUR-SITE.netlify.app"]` exact JSON array |
 | `SUPERADMIN_EMAIL` | optional — platform superadmin email (created on boot) |
@@ -67,6 +84,12 @@ python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().d
 | `OPENAI_API_KEY` | optional |
 
 Netlify deploy URLs (`*.netlify.app`) are also allowed via `BACKEND_CORS_ORIGIN_REGEX` by default.
+
+Also run once against the DB (Query tab or `psql`):
+
+```sql
+CREATE EXTENSION IF NOT EXISTS postgis;
+```
 
 Start command is already in the root `Dockerfile`:
 
@@ -137,6 +160,8 @@ If you add a custom domain later, add that origin too.
 |---------|--------|-----|
 | Railpack: “could not determine how to build” listing `./apps`, `docs` | Builder at **repo root** without Docker config | Use committed `railway.toml` + root `Dockerfile`, or set root dir `apps/api` |
 | Railpack: “Script start.sh not found” | Same — wrong builder | Switch to Dockerfile builder |
+| Alembic / API: `127.0.0.1:5432` connection refused | `DATABASE_URL` not set or still localhost | Link Postgres → API via variable reference; redeploy |
+| Alembic: `No module named 'psycopg2'` | Railway `postgresql://` URL used as sync driver | App normalizes to `postgresql+asyncpg://` — redeploy latest `main` |
 | Netlify: `(index):1 404` | Static deploy / wrong base / no Next plugin | Use `netlify.toml`; redeploy |
 | API CORS errors in browser | `BACKEND_CORS_ORIGINS` missing Netlify origin | Update + restart API (or rely on `*.netlify.app` regex) |
 | `Failed to fetch` / cannot reach API | Web still on localhost API or wrong URL | Set `NEXT_PUBLIC_API_URL` to Railway HTTPS URL and **redeploy Netlify** |

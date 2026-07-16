@@ -22,4 +22,4 @@ ENV DEBUG=false
 EXPOSE 8000
 
 # Railway injects PORT; local/docker default to 8000.
-CMD ["sh", "-c", "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"]
+CMD ["sh", "-c", "python -m app.scripts.preflight_db && alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"]
