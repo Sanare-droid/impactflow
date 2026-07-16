@@ -52,6 +52,12 @@ from app.models.field_device import (
     SyncMutationLog,
     SyncSession,
 )
+from app.models.integration_hub import (
+    ApiUsageLog,
+    ConnectorSyncJob,
+    FieldMappingProfile,
+    PluginManifest,
+)
 from app.models.workflow import (
     Workflow,
     WorkflowApproval,
@@ -130,4 +136,8 @@ __all__ = [
     "SyncMutationLog",
     "SyncConflictLog",
     "MediaUploadRecord",
+    "ConnectorSyncJob",
+    "FieldMappingProfile",
+    "PluginManifest",
+    "ApiUsageLog",
 ]

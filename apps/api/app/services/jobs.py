@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 from datetime import date, timedelta
 from typing import Any
@@ -60,6 +61,21 @@ async def _deliver_one(db: AsyncSession, delivery: WebhookDelivery) -> None:
     headers = {"Content-Type": "application/json", "User-Agent": "ImpactFlow-Webhooks/1.0"}
     if provider == "slack":
         body = _slack_body(delivery.payload)
+
+    # HMAC signature when encrypted shared_secret is present
+    if integ:
+        try:
+            from app.services.connectors.runtime import (
+                compute_webhook_signature,
+                signing_secret_from_config,
+            )
+
+            secret = signing_secret_from_config(integ.config or {})
+            if secret:
+                raw = json.dumps(body, default=str, separators=(",", ":")).encode("utf-8")
+                headers["X-ImpactFlow-Signature"] = compute_webhook_signature(secret, raw)
+        except Exception:  # noqa: BLE001
+            pass
 
     try:
         async with httpx.AsyncClient(timeout=20.0) as client:

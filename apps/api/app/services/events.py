@@ -24,6 +24,12 @@ EVENT_REPORT_PUBLISHED = "report.published"
 EVENT_USER_INVITED = "user.invited"
 EVENT_TASK_OVERDUE = "task.overdue"
 EVENT_INTEGRATION_ERROR = "integration.error"
+EVENT_WEBHOOK_RECEIVED = "webhook.received"
+EVENT_CONNECTOR_SYNCED = "connector.synced"
+EVENT_BENEFICIARY_CREATED = "beneficiary.created"
+EVENT_SURVEY_COMPLETED = "survey.completed"
+EVENT_GRANT_EXPIRING = "grant.expiring"
+EVENT_DEVICE_SYNCED = "device.synced"
 
 
 def _hash_payload(payload: dict) -> str:

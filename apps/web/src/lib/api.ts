@@ -1027,6 +1027,177 @@ export type IntegrationConnection = {
   updated_at: string;
 };
 
+export type ConnectorConfigField = {
+  key: string;
+  label: string;
+  required?: boolean;
+  secret?: boolean;
+  type?: string;
+};
+
+export type ConnectorDefinition = {
+  code: string;
+  name: string;
+  category: string;
+  auth_type: string;
+  sync_modes?: string[];
+  directions?: string[];
+  description?: string;
+  config_schema?: { fields?: ConnectorConfigField[] };
+  oauth?: Record<string, unknown>;
+  health_check?: string;
+  version?: string;
+  status?: string;
+};
+
+export type ConnectorCatalogResponse = {
+  items: ConnectorDefinition[];
+  total: number;
+};
+
+export type EnabledConnector = {
+  id: string;
+  name: string;
+  provider: string;
+  status: string;
+  direction: string;
+  config?: Record<string, unknown>;
+};
+
+export type ConnectorHealthResult = {
+  healthy: boolean;
+  check?: string;
+  message?: string;
+  connector?: string;
+  checked_at?: string;
+};
+
+export type ConnectorSyncJob = {
+  id: string;
+  organization_id: string;
+  integration_id: string;
+  connector_code: string;
+  status: string;
+  direction: string;
+  mode: string;
+  records_processed: number;
+  records_failed: number;
+  error_message?: string | null;
+  result?: Record<string, unknown>;
+  started_at?: string | null;
+  completed_at?: string | null;
+  created_at?: string | null;
+};
+
+export type IntegrationExport = {
+  name: string;
+  provider: string;
+  direction: string;
+  endpoint_url?: string | null;
+  events?: string[];
+  config?: Record<string, unknown>;
+  metadata?: Record<string, unknown>;
+  exported_at?: string;
+};
+
+export type IntegrationMonitoring = {
+  connected_systems: number;
+  healthy_connectors: number;
+  errored_connectors: number;
+  webhook_pending: number;
+  webhook_delivered: number;
+  webhook_dead: number;
+  queue_depth: number;
+  sync_completed: number;
+  sync_failed: number;
+  api_keys_active: number;
+  success_rate: number;
+  failure_rate: number;
+  generated_at?: string;
+};
+
+export type FieldMappingProfile = {
+  id: string;
+  name: string;
+  code: string;
+  entity_type: string;
+  connector_code?: string | null;
+  mappings: { source: string; target: string; transform?: string }[];
+  defaults?: Record<string, unknown>;
+  validation_rules?: { field: string; required?: boolean }[];
+  status: string;
+};
+
+export type FieldMappingPreview = {
+  mapped: Record<string, unknown>;
+  errors: string[];
+  valid: boolean;
+};
+
+export type WebhookDelivery = {
+  id: string;
+  organization_id: string;
+  integration_id: string;
+  event_type: string;
+  status: string;
+  attempt_count: number;
+  max_attempts: number;
+  next_attempt_at?: string | null;
+  delivered_at?: string | null;
+  last_error?: string | null;
+  response_status?: number | null;
+  endpoint_url?: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type PlatformEventDef = {
+  code: string;
+  description: string;
+};
+
+export type PluginManifest = {
+  id: string;
+  code: string;
+  name: string;
+  version: string;
+  status: string;
+  events?: string[];
+  ui_panels?: string[];
+  workflow_actions?: string[];
+  ai_tools?: string[];
+  description?: string | null;
+};
+
+export type DeveloperPortal = {
+  api_version: string;
+  openapi_url: string;
+  docs_url: string;
+  authentication: {
+    jwt: string;
+    api_key: string;
+    organization_header: string;
+  };
+  webhooks: {
+    outbound: string;
+    inbound: string;
+    signing_header: string;
+    retry: string;
+  };
+  events: PlatformEventDef[];
+  connectors: {
+    code: string;
+    name: string;
+    category: string;
+    auth_type: string;
+    version?: string;
+    status?: string;
+  }[];
+  code_samples: Record<string, string>;
+  postman?: { hint?: string };
+  changelog: { version: string; notes: string }[];
+};
+
 export type OrgBranding = {
   id: string;
   organization_id: string;
@@ -2379,6 +2550,12 @@ class ApiClient {
     return this.request<OrgApiKey>(`/api-keys/${id}/revoke`, { method: "POST" });
   }
 
+  rotateApiKey(id: string) {
+    return this.request<OrgApiKeyCreated>(`/api-keys/${id}/rotate`, {
+      method: "POST",
+    });
+  }
+
   listIntegrations() {
     return this.request<Paginated<IntegrationConnection>>("/integrations?page_size=100");
   }
@@ -2394,6 +2571,182 @@ class ApiClient {
     return this.request<IntegrationConnection>(`/integrations/${id}/test`, {
       method: "POST",
     });
+  }
+
+  listConnectors(params: { category?: string; include_future?: boolean } = {}) {
+    const q = new URLSearchParams();
+    if (params.category) q.set("category", params.category);
+    if (params.include_future === false) q.set("include_future", "false");
+    const qs = q.toString();
+    return this.request<ConnectorCatalogResponse>(
+      `/connectors${qs ? `?${qs}` : ""}`,
+    );
+  }
+
+  getConnector(code: string) {
+    return this.request<ConnectorDefinition>(
+      `/connectors/${encodeURIComponent(code)}`,
+    );
+  }
+
+  enableConnector(body: {
+    connector_code: string;
+    name?: string;
+    config?: Record<string, unknown>;
+    secret?: string;
+    endpoint_url?: string;
+    events?: string[];
+  }) {
+    return this.request<EnabledConnector>("/connectors/enable", {
+      method: "POST",
+      body: JSON.stringify(body),
+    });
+  }
+
+  integrationHealth(id: string) {
+    return this.request<ConnectorHealthResult>(`/integrations/${id}/health`, {
+      method: "POST",
+    });
+  }
+
+  syncIntegration(
+    id: string,
+    body: {
+      mode?: "full" | "incremental" | "dry_run";
+      direction?: "pull" | "push";
+      dry_run?: boolean;
+    } = {},
+  ) {
+    return this.request<ConnectorSyncJob>(`/integrations/${id}/sync`, {
+      method: "POST",
+      body: JSON.stringify({
+        mode: body.mode ?? "incremental",
+        direction: body.direction ?? "pull",
+        dry_run: body.dry_run ?? false,
+      }),
+    });
+  }
+
+  listSyncJobs(
+    params: {
+      page?: number;
+      page_size?: number;
+      integration_id?: string;
+      status?: string;
+    } = {},
+  ) {
+    const q = new URLSearchParams();
+    if (params.page) q.set("page", String(params.page));
+    if (params.page_size) q.set("page_size", String(params.page_size));
+    if (params.integration_id) q.set("integration_id", params.integration_id);
+    if (params.status) q.set("status", params.status);
+    const qs = q.toString();
+    return this.request<Paginated<ConnectorSyncJob>>(
+      `/integrations/sync-jobs${qs ? `?${qs}` : ""}`,
+    );
+  }
+
+  cloneIntegration(id: string, name?: string) {
+    const q = name ? `?name=${encodeURIComponent(name)}` : "";
+    return this.request<{ id: string; name: string; status: string }>(
+      `/integrations/${id}/clone${q}`,
+      { method: "POST" },
+    );
+  }
+
+  exportIntegration(id: string) {
+    return this.request<IntegrationExport>(`/integrations/${id}/export`);
+  }
+
+  startIntegrationOAuth(
+    id: string,
+    body: { redirect_uri: string; connector_code?: string },
+  ) {
+    return this.request<{ authorize_url: string; state: string }>(
+      `/integrations/${id}/oauth/start`,
+      { method: "POST", body: JSON.stringify(body) },
+    );
+  }
+
+  integrationMonitoring() {
+    return this.request<IntegrationMonitoring>("/integrations/monitoring");
+  }
+
+  listFieldMappings(params: { entity_type?: string; page_size?: number } = {}) {
+    const q = new URLSearchParams({
+      page_size: String(params.page_size ?? 100),
+    });
+    if (params.entity_type) q.set("entity_type", params.entity_type);
+    return this.request<Paginated<FieldMappingProfile>>(
+      `/field-mappings?${q}`,
+    );
+  }
+
+  createFieldMapping(body: {
+    name: string;
+    code?: string;
+    entity_type?: string;
+    connector_code?: string;
+    integration_id?: string;
+    mappings?: { source: string; target: string; transform?: string }[];
+    transformations?: Record<string, unknown>;
+    defaults?: Record<string, unknown>;
+    validation_rules?: { field: string; required?: boolean }[];
+  }) {
+    return this.request<{ id: string; code: string; name: string }>(
+      "/field-mappings",
+      { method: "POST", body: JSON.stringify(body) },
+    );
+  }
+
+  previewFieldMapping(id: string, sample: Record<string, unknown>) {
+    return this.request<FieldMappingPreview>(
+      `/field-mappings/${id}/preview`,
+      { method: "POST", body: JSON.stringify({ sample }) },
+    );
+  }
+
+  listWebhookDeliveries(params: { status?: string; page?: number } = {}) {
+    const q = new URLSearchParams({ page_size: "50" });
+    if (params.status) q.set("status", params.status);
+    if (params.page) q.set("page", String(params.page));
+    return this.request<Paginated<WebhookDelivery>>(
+      `/webhook-deliveries?${q}`,
+    );
+  }
+
+  redriveDeadWebhooks(limit = 25) {
+    return this.request<{ redriven: number }>(
+      `/webhooks/dead/redrive?limit=${limit}`,
+      { method: "POST" },
+    );
+  }
+
+  getDeveloperPortal() {
+    return this.request<DeveloperPortal>("/developer/portal");
+  }
+
+  listDeveloperEvents() {
+    return this.request<{ items: PlatformEventDef[] }>("/developer/events");
+  }
+
+  async downloadDeveloperOpenApi(filename = "impactflow-openapi.json") {
+    const headers = new Headers();
+    if (this.accessToken) headers.set("Authorization", `Bearer ${this.accessToken}`);
+    if (this.organizationId) headers.set("X-Organization-Id", this.organizationId);
+    const res = await fetch(`${API_V1}/developer/openapi`, { headers });
+    if (!res.ok) throw new Error("OpenAPI download failed");
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  listPlugins() {
+    return this.request<{ items: PluginManifest[] }>("/plugins");
   }
 
   getBranding() {

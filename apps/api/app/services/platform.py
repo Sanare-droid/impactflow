@@ -465,21 +465,26 @@ async def create_integration(
 ) -> IntegrationConnection:
     secret = data.pop("secret", None)
     secret_hint = None
+    config = dict(data.get("config") or {})
     if secret:
         secret_hint = str(secret)[-4:]
-        # Store only that a secret was set — never persist plaintext in config
-        config = dict(data.get("config") or {})
-        config["has_secret"] = True
-        data["config"] = config
+        from app.services.connectors.runtime import store_encrypted_config
+
+        config = store_encrypted_config(config, secret=secret)
+    elif any(k in config for k in ("token", "password", "client_secret", "webhook_url", "shared_secret")):
+        from app.services.connectors.runtime import store_encrypted_config
+
+        config = store_encrypted_config(config)
+    data["config"] = config
     row = IntegrationConnection(
         organization_id=organization_id,
         name=data["name"],
         provider=data.get("provider") or "webhook",
         status=data.get("status") or "active",
         direction=data.get("direction") or "outbound",
-        endpoint_url=data.get("endpoint_url"),
+        endpoint_url=data.get("endpoint_url") or config.get("endpoint_url"),
         secret_hint=secret_hint,
-        config=data.get("config") or {},
+        config=config,
         events=data.get("events") or [],
         created_by_id=actor_id,
     )
@@ -515,9 +520,19 @@ async def update_integration(
     secret = data.pop("secret", None)
     if secret:
         row.secret_hint = str(secret)[-4:]
-        config = dict(data.get("config") or row.config or {})
-        config["has_secret"] = True
+        from app.services.connectors.runtime import store_encrypted_config
+
+        config = store_encrypted_config(dict(data.get("config") or row.config or {}), secret=secret)
         data["config"] = config
+    elif "config" in data and data["config"] is not None:
+        from app.services.connectors.runtime import store_encrypted_config
+
+        merged = dict(row.config or {})
+        merged.update(data["config"])
+        # Preserve existing encrypted blob unless overwritten
+        if "_encrypted" in (row.config or {}) and "_encrypted" not in data["config"]:
+            merged["_encrypted"] = (row.config or {})["_encrypted"]
+        data["config"] = store_encrypted_config(merged)
     for key, value in data.items():
         if value is not None and hasattr(row, key):
             setattr(row, key, value)

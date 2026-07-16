@@ -175,8 +175,8 @@ flowchart LR
 
 ---
 
-## Inventory notes (as of Epic 5 / API 0.17)
+## Inventory notes (as of Epic 6 / API 0.18)
 
-**Exists:** Full A–E stack, Epics 1–4, plus Epic 5 Executive Analytics & Donor Reporting (`docs/EPIC5_EXECUTIVE.md`): executive dashboard, portfolio/impact/compliance/risk APIs, report templates + versions, multi-format exports, AI briefs via existing Copilot.
+**Exists:** Full A–E stack, Epics 1–5, plus Epic 6 Integrations Hub (`docs/EPIC6_INTEGRATIONS_HUB.md`): connector registry, encrypted credentials, sync jobs, field mapping, inbound webhooks + DLQ redrive, developer portal, plugin/marketplace foundation, monitoring dashboard.
 
-**Deferred:** Native PDF binary engine, push notifications, encrypted SQLite, offline maps, OAuth integrations.
+**Deferred:** Live OAuth token exchange, scheduled Kobo/ODK worker pulls, GraphQL, Twilio/WhatsApp send, native PDF engine.

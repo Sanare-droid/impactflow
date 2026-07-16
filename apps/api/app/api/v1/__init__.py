@@ -8,6 +8,7 @@ from app.api.v1 import (
     executive,
     field_ops,
     finance,
+    hub,
     insights,
     meal,
     notifications,
@@ -34,3 +35,4 @@ api_router.include_router(surveys.router)
 api_router.include_router(workflows.router)
 api_router.include_router(field_ops.router)
 api_router.include_router(executive.router)
+api_router.include_router(hub.router)
