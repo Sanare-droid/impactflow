@@ -441,6 +441,7 @@ TEMPLATES: list[dict[str, Any]] = [
                     "config": {
                         "subject": "Grant expiring: {{trigger.title}}",
                         "body": "A grant is approaching its end date. Please review.",
+                        "link": "/app/grants",
                         "role_slugs": ["org_admin"],
                     },
                 },

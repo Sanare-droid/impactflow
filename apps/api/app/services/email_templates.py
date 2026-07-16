@@ -123,3 +123,49 @@ def password_reset(*, reset_url: str, first_name: str = "") -> tuple[str, str, s
       <p style="margin:16px 0 0;font-size:12px;color:#8A8278;word-break:break-all;">Or paste this link into your browser:<br />{escape(reset_url)}</p>
     """
     return subject, plain, _layout(title="Password reset", preheader="Reset your ImpactFlow password", inner_html=inner)
+
+
+def _plain_to_html_paragraphs(text: str) -> str:
+    chunks = [c.strip() for c in (text or "").replace("\r\n", "\n").split("\n\n")]
+    parts: list[str] = []
+    for chunk in chunks:
+        if not chunk:
+            continue
+        lines = "<br />".join(escape(line) for line in chunk.split("\n"))
+        parts.append(f'<p style="margin:0 0 16px;">{lines}</p>')
+    if not parts:
+        return '<p style="margin:0;"> </p>'
+    return "".join(parts)
+
+
+def workflow_message(
+    *,
+    subject: str,
+    body: str,
+    link: str | None = None,
+    link_label: str = "Open in ImpactFlow",
+    title: str | None = None,
+) -> tuple[str, str, str]:
+    """Styled wrapper for workflow / automation emails. Returns (subject, plain, html)."""
+    subj = (subject or "ImpactFlow notification").strip()[:255] or "ImpactFlow notification"
+    plain_body = (body or "").strip()
+    header = (title or subj).strip()[:120] or "Notification"
+    plain = plain_body
+    if link:
+        plain = f"{plain}\n\n{link}" if plain else link
+
+    inner = _plain_to_html_paragraphs(plain_body)
+    if link:
+        inner += f'<p style="margin:8px 0 0;">{_button(href=link, label=link_label)}</p>'
+        inner += (
+            f'<p style="margin:16px 0 0;font-size:12px;color:#8A8278;word-break:break-all;">'
+            f"{escape(link)}</p>"
+        )
+
+    html = _layout(
+        title=header,
+        preheader=(plain_body[:140] if plain_body else header),
+        inner_html=inner,
+    )
+    return subj, plain or header, html
+

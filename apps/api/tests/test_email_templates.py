@@ -26,3 +26,19 @@ def test_password_reset_includes_button_and_url():
     assert "token=abc" in plain
     assert "token=abc" in html
     assert "Reset password" in html
+
+
+def test_workflow_message_styles_body_and_optional_link():
+    subject, plain, html = email_templates.workflow_message(
+        subject="Grant expiring",
+        body="A grant is approaching its end date.\n\nPlease review.",
+        link="https://impactflowai.netlify.app/app/grants",
+        title="Action needed",
+    )
+    assert subject == "Grant expiring"
+    assert "approaching" in plain
+    assert "/app/grants" in plain
+    assert "<!DOCTYPE html>" in html
+    assert "Action needed" in html
+    assert "Open in ImpactFlow" in html
+    assert "Please review." in html

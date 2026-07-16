@@ -1059,14 +1059,34 @@ async def _run_action(
             recipients = [recipients]
         if not recipients:
             recipients = await _member_emails(db, org_id, config.get("role_slugs"))
-        from app.services import mailer
+        from app.core.config import settings
+        from app.services import email_templates, mailer
+
+        raw_link = config.get("link") or config.get("cta_url")
+        link: str | None = None
+        if isinstance(raw_link, str) and raw_link.strip():
+            link = raw_link.strip()
+            frontend = (settings.frontend_url or "").rstrip("/")
+            if link.startswith("/") and frontend:
+                link = f"{frontend}{link}"
+
+        subject, plain, html = email_templates.workflow_message(
+            subject=(config.get("subject") or "ImpactFlow workflow")[:255],
+            body=config.get("body") or "",
+            link=link,
+            link_label=str(
+                config.get("link_label") or config.get("cta_label") or "Open in ImpactFlow"
+            )[:80],
+            title=config.get("title") if isinstance(config.get("title"), str) else None,
+        )
 
         sent = 0
         for email in recipients:
             result = await mailer.send_email(
                 to=email,
-                subject=(config.get("subject") or "ImpactFlow workflow")[:255],
-                body=config.get("body") or "",
+                subject=subject,
+                body=plain,
+                html=html,
             )
             if result.get("status") in ("sent", "queued_stub"):
                 sent += 1
