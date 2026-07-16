@@ -40,7 +40,7 @@ class RegisterOrganizationRequest(BaseModel):
     organization_type: str = Field(default="ngo", max_length=64)
     country_code: Optional[str] = Field(default=None, min_length=2, max_length=2)
     email: EmailStr
-    password: str = Field(min_length=12, max_length=128)
+    password: str = Field(min_length=8, max_length=128)
     first_name: str = Field(min_length=1, max_length=100)
     last_name: str = Field(min_length=1, max_length=100)
 
@@ -122,7 +122,12 @@ class UserResponse(UserBrief):
 
 class ChangePasswordRequest(BaseModel):
     current_password: str = Field(min_length=1, max_length=128)
-    new_password: str = Field(min_length=12, max_length=128)
+    new_password: str = Field(min_length=8, max_length=128)
+
+    @field_validator("new_password")
+    @classmethod
+    def validate_new_password(cls, value: str) -> str:
+        return RegisterOrganizationRequest.validate_password(value)
 
 
 class ForgotPasswordRequest(BaseModel):
@@ -131,7 +136,12 @@ class ForgotPasswordRequest(BaseModel):
 
 class ResetPasswordRequest(BaseModel):
     token: str = Field(min_length=20, max_length=200)
-    new_password: str = Field(min_length=12, max_length=128)
+    new_password: str = Field(min_length=8, max_length=128)
+
+    @field_validator("new_password")
+    @classmethod
+    def validate_reset_password(cls, value: str) -> str:
+        return RegisterOrganizationRequest.validate_password(value)
 
 
 class UserUpdateRequest(BaseModel):

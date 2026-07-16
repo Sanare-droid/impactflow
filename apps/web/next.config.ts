@@ -6,6 +6,15 @@ const nextConfig: NextConfig = {
   ...(process.env.NETLIFY || process.env.VERCEL
     ? {}
     : { output: "standalone" as const }),
+  images: {
+    remotePatterns: [
+      {
+        protocol: "https",
+        hostname: "images.unsplash.com",
+        pathname: "/**",
+      },
+    ],
+  },
 };
 
 export default nextConfig;

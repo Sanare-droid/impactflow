@@ -130,6 +130,10 @@ export default function LoginPage() {
               onChange={(e) => setOrganizationSlug(e.target.value)}
               placeholder="hope-foundation"
             />
+            <p className="mt-1 text-xs text-stone-500">
+              Leave blank for platform admin. Use your workspace slug for org
+              accounts.
+            </p>
           </div>
           {mfaRequired && (
             <div>

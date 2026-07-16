@@ -53,12 +53,13 @@ async def lifespan(_app: FastAPI):
         try:
             from app.scripts.seed_superadmin import ensure_superadmin
 
-            await ensure_superadmin(
+            admin = await ensure_superadmin(
                 email=settings.superadmin_email,
                 password=settings.superadmin_password,
                 first_name=settings.superadmin_first_name,
                 last_name=settings.superadmin_last_name,
             )
+            logger.info("superadmin.bootstrap_ok email=%s", admin.email)
         except Exception:
             logger.exception("superadmin.bootstrap_failed")
 

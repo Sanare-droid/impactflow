@@ -1,15 +1,15 @@
 import type { Metadata } from "next";
-import { Manrope, Source_Serif_4 } from "next/font/google";
+import { DM_Sans, Fraunces } from "next/font/google";
 import { Providers } from "@/providers/providers";
 import { APP_NAME } from "@/lib/api";
 import "./globals.css";
 
-const body = Manrope({
+const body = DM_Sans({
   subsets: ["latin"],
   variable: "--font-body",
 });
 
-const display = Source_Serif_4({
+const display = Fraunces({
   subsets: ["latin"],
   variable: "--font-display",
 });
@@ -24,7 +24,7 @@ export const metadata: Metadata = {
     template: `%s · ${APP_NAME}`,
   },
   description:
-    "Enterprise MEAL, grants, and impact operating system for the development sector.",
+    "ImpactFlow helps development organizations turn field work into clear evidence for the people and donors who depend on them.",
   applicationName: APP_NAME,
   openGraph: {
     type: "website",
@@ -32,13 +32,13 @@ export const metadata: Metadata = {
     siteName: APP_NAME,
     title: APP_NAME,
     description:
-      "Plan programs, collect field evidence, monitor indicators, and report donor impact from one secure platform.",
+      "One workspace to plan programs, gather evidence, and show the difference your work makes.",
   },
   twitter: {
     card: "summary_large_image",
     title: APP_NAME,
     description:
-      "MEAL operating system for development organizations worldwide.",
+      "Show the human impact behind every program — clearly, securely, together.",
   },
 };
 

@@ -40,7 +40,7 @@ export default function OrganizationAdminPage() {
         data_retention_days: Number(retentionDays) || 365,
         security: {
           session_timeout_minutes: 480,
-          password_min_length: 12,
+          password_min_length: 8,
           mfa_recommended: true,
         },
       }),

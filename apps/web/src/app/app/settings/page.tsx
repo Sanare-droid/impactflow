@@ -119,7 +119,7 @@ function SettingsContent() {
 
       <Card>
         <CardTitle>Change password</CardTitle>
-        <CardDescription>Use at least 12 characters with upper, lower, and a digit.</CardDescription>
+        <CardDescription>Use at least 8 characters with upper, lower, and a digit.</CardDescription>
         <form className="mt-4 grid max-w-md gap-3" onSubmit={onChangePassword}>
           <div>
             <Label htmlFor="current">Current password</Label>
@@ -137,7 +137,7 @@ function SettingsContent() {
               id="new"
               type="password"
               required
-              minLength={12}
+              minLength={8}
               value={newPassword}
               onChange={(e) => setNewPassword(e.target.value)}
             />
@@ -148,7 +148,7 @@ function SettingsContent() {
               id="confirm"
               type="password"
               required
-              minLength={12}
+              minLength={8}
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
             />

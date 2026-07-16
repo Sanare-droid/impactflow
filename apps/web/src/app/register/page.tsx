@@ -129,12 +129,12 @@ export default function RegisterPage() {
             />
           </div>
           <div className="md:col-span-2">
-            <Label htmlFor="password">Password (12+ chars, mixed case, digit)</Label>
+            <Label htmlFor="password">Password (8+ chars, mixed case, digit)</Label>
             <Input
               id="password"
               type="password"
               required
-              minLength={12}
+              minLength={8}
               value={form.password}
               onChange={(e) => update("password", e.target.value)}
             />

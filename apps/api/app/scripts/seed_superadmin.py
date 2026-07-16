@@ -21,6 +21,7 @@ import sys
 
 from sqlalchemy import select
 
+from app.core.config import settings
 from app.core.security import hash_password
 from app.db.base import utcnow
 from app.db.session import AsyncSessionLocal
@@ -35,8 +36,12 @@ async def ensure_superadmin(
     last_name: str = "Admin",
 ) -> User:
     email_norm = email.lower().strip()
-    if len(password) < 12:
-        raise ValueError("SUPERADMIN_PASSWORD must be at least 12 characters")
+    password = password.strip()
+    min_len = max(8, int(settings.password_min_length or 8))
+    if len(password) < min_len:
+        raise ValueError(
+            f"SUPERADMIN_PASSWORD must be at least {min_len} characters"
+        )
 
     async with AsyncSessionLocal() as db:
         user = await db.scalar(select(User).where(User.email == email_norm))

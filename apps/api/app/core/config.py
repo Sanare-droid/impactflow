@@ -87,7 +87,7 @@ class Settings(BaseSettings):
     jobs_enabled: bool = True
 
     # Password policy
-    password_min_length: int = 12
+    password_min_length: int = 8
     max_login_attempts: int = 5
     lockout_minutes: int = 15
 
@@ -108,6 +108,19 @@ class Settings(BaseSettings):
     def parse_database_url(cls, value: object) -> object:
         if isinstance(value, str):
             return normalize_database_url(value)
+        return value
+
+    @field_validator(
+        "superadmin_email",
+        "superadmin_password",
+        "jwt_secret_key",
+        "encryption_key",
+        mode="before",
+    )
+    @classmethod
+    def strip_secrets(cls, value: object) -> object:
+        if isinstance(value, str):
+            return value.strip()
         return value
 
     @property

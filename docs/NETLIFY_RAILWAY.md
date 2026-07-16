@@ -75,8 +75,8 @@ python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().d
 | `REDIS_URL` | **Reference from Redis plugin** (required) |
 | `FRONTEND_URL` | `https://YOUR-SITE.netlify.app` (update after Netlify deploy) |
 | `BACKEND_CORS_ORIGINS` | `["https://YOUR-SITE.netlify.app"]` exact JSON array |
-| `SUPERADMIN_EMAIL` | optional — platform superadmin email (created on boot) |
-| `SUPERADMIN_PASSWORD` | optional — 12+ chars; pairs with SUPERADMIN_EMAIL |
+| `SUPERADMIN_EMAIL` | optional — platform superadmin email (created/updated on every boot) |
+| `SUPERADMIN_PASSWORD` | optional — 8+ chars, mixed case + digit; pairs with SUPERADMIN_EMAIL |
 | `OPENAI_API_KEY` | optional |
 
 Netlify deploy URLs (`*.netlify.app`) are also allowed via `BACKEND_CORS_ORIGIN_REGEX` by default.
@@ -156,7 +156,7 @@ If you add a custom domain later, add that origin too.
 | API CORS errors in browser | `BACKEND_CORS_ORIGINS` missing Netlify origin | Update + restart API (or rely on `*.netlify.app` regex) |
 | `Failed to fetch` / cannot reach API | Web still on localhost API or wrong URL | Set `NEXT_PUBLIC_API_URL` to Railway HTTPS URL and **redeploy Netlify** |
 | `/ready` database false | Bad `DATABASE_URL` or Redis | Fix URL scheme / Redis link; check migration logs |
-| Alembic: `extension 'postgis' is not available` | Old migration required PostGIS | Redeploy latest `main` (PostGIS create removed) |
+| Login `401 Unauthorized` | Wrong password, or `SUPERADMIN_*` never seeded (password too short / vars missing) | Set `SUPERADMIN_EMAIL` + `SUPERADMIN_PASSWORD` (8+), redeploy API; leave org slug blank; check Railway logs for `superadmin.bootstrap_ok` |
 | Login works locally only | Web still pointing at localhost API | Rebuild Netlify with correct `NEXT_PUBLIC_API_URL` |
 
 ---

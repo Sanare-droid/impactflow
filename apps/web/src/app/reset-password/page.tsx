@@ -51,7 +51,7 @@ function ResetPasswordForm() {
             id="password"
             type="password"
             required
-            minLength={12}
+            minLength={8}
             value={password}
             onChange={(e) => setPassword(e.target.value)}
           />
@@ -62,7 +62,7 @@ function ResetPasswordForm() {
             id="confirm"
             type="password"
             required
-            minLength={12}
+            minLength={8}
             value={confirm}
             onChange={(e) => setConfirm(e.target.value)}
           />
