@@ -1,5 +1,8 @@
 # Deploying ImpactFlow AI
 
+> **Full rollout plan:** [DEPLOYMENT_PLAN.md](./DEPLOYMENT_PLAN.md) (phases, RACI, go-live gates)  
+> **End-user guide:** [USER_MANUAL.md](./USER_MANUAL.md)
+
 ## Local development (default)
 
 ```bash
@@ -89,12 +92,14 @@ Scopes:
 
 ## Health
 
-`GET /health` → `{ "status": "ok", "version": "0.11.0", ... }` (liveness)
+`GET /health` → `{ "status": "ok", "version": "0.19.0", ... }` (liveness)
 
 `GET /ready` → `{ "status": "ready", "checks": { "database": true, "redis": true } }` (readiness; 503 if either dependency is down)
 
 ## Related
 
+- [Deployment plan](./DEPLOYMENT_PLAN.md)  
+- [User manual](./USER_MANUAL.md)  
 - [Architecture](./ARCHITECTURE.md)  
 - [Epic 7 Enterprise SaaS](./EPIC7_ENTERPRISE.md)  
 - [Kubernetes stubs](../deploy/k8s/README.md)  
