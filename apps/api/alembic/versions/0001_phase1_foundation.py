@@ -21,7 +21,8 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    op.execute("CREATE EXTENSION IF NOT EXISTS postgis")
+    # PostGIS is optional (local docker-compose uses postgis/postgis). Railway's
+    # stock Postgres image does not ship PostGIS; geometry is stored as JSONB.
     op.execute('CREATE EXTENSION IF NOT EXISTS "uuid-ossp"')
 
     op.create_table(

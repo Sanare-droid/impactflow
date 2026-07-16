@@ -13,7 +13,7 @@ This guide fixes the common monorepo mistakes:
 |---------|------|----------------|
 | Web (Next.js) | Netlify | `apps/web` |
 | API (FastAPI) | Railway | `apps/api` (Docker via root `Dockerfile`) |
-| Postgres (+ PostGIS) | Railway plugin | — |
+| Postgres | Railway plugin | — (PostGIS not required; geometry is JSONB) |
 | Redis | Railway plugin | — |
 
 Repo helpers:
@@ -28,11 +28,7 @@ Repo helpers:
 ### 1. Create project & add data stores
 
 1. New Railway project.
-2. Add **PostgreSQL**. After it is up, open Query / connect and run:
-   ```sql
-   CREATE EXTENSION IF NOT EXISTS postgis;
-   ```
-   ImpactFlow’s first migration requires PostGIS.
+2. Add **PostgreSQL** (standard Railway Postgres is fine — PostGIS is not required).
 3. Add **Redis**.
 
 ### 2. Deploy the API service
@@ -85,12 +81,6 @@ python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().d
 
 Netlify deploy URLs (`*.netlify.app`) are also allowed via `BACKEND_CORS_ORIGIN_REGEX` by default.
 
-Also run once against the DB (Query tab or `psql`):
-
-```sql
-CREATE EXTENSION IF NOT EXISTS postgis;
-```
-
 Start command is already in the root `Dockerfile`:
 
 `alembic upgrade head && uvicorn … --port $PORT`
@@ -103,7 +93,7 @@ Start command is already in the root `Dockerfile`:
    - `https://YOUR-API.up.railway.app/ready`  
    Expect `database: true`, `redis: true`.
 
-If `/ready` fails, fix `DATABASE_URL` / `REDIS_URL` / PostGIS before wiring Netlify.
+If `/ready` fails, fix `DATABASE_URL` / `REDIS_URL` before wiring Netlify.
 
 ---
 
@@ -165,7 +155,8 @@ If you add a custom domain later, add that origin too.
 | Netlify: `(index):1 404` | Static deploy / wrong base / no Next plugin | Use `netlify.toml`; redeploy |
 | API CORS errors in browser | `BACKEND_CORS_ORIGINS` missing Netlify origin | Update + restart API (or rely on `*.netlify.app` regex) |
 | `Failed to fetch` / cannot reach API | Web still on localhost API or wrong URL | Set `NEXT_PUBLIC_API_URL` to Railway HTTPS URL and **redeploy Netlify** |
-| `/ready` database false | Bad `DATABASE_URL` or no PostGIS | Fix URL scheme + `CREATE EXTENSION postgis` |
+| `/ready` database false | Bad `DATABASE_URL` or Redis | Fix URL scheme / Redis link; check migration logs |
+| Alembic: `extension 'postgis' is not available` | Old migration required PostGIS | Redeploy latest `main` (PostGIS create removed) |
 | Login works locally only | Web still pointing at localhost API | Rebuild Netlify with correct `NEXT_PUBLIC_API_URL` |
 
 ---
