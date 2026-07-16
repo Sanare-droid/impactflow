@@ -80,6 +80,10 @@ python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().d
 | `OPENAI_API_KEY` | optional |
 | `RESEND_API_KEY` | Resend API key (`re_…`) — preferred email provider |
 | `SMTP_FROM` | Sender, e.g. `ImpactFlow <noreply@yourdomain.com>` (or `onboarding@resend.dev` while testing) |
+| `PAYSTACK_SECRET_KEY` | Paystack secret key — enables live checkout for paid plans |
+| `PAYSTACK_PUBLIC_KEY` | Paystack public key |
+| `PAYSTACK_CURRENCY` | e.g. `NGN` (default) |
+| `PAYSTACK_USD_TO_LOCAL` | FX for USD catalog → local (default `1600`) |
 
 Netlify deploy URLs (`*.netlify.app`) are also allowed via `BACKEND_CORS_ORIGIN_REGEX` by default.
 

@@ -1,6 +1,6 @@
 """Epic 7 — enterprise SaaS services (billing, flags, domains, onboarding, backups).
 
-Provider-agnostic billing: Stripe can plug in later via provider_* fields.
+Provider-agnostic billing: Paystack for paid upgrades; Stripe-ready fields retained.
 """
 
 from __future__ import annotations
@@ -51,6 +51,7 @@ PLAN_SEED: list[dict[str, Any]] = [
         "trial_days": 0,
         "features": ["surveys", "beneficiaries", "reports_basic"],
         "sort_order": 0,
+        "description": "Get started — up to 3 seats, core MEAL tools",
     },
     {
         "code": "starter",
@@ -70,6 +71,7 @@ PLAN_SEED: list[dict[str, Any]] = [
             "field_ops",
         ],
         "sort_order": 1,
+        "description": "Field teams + AI assist for growing NGOs",
     },
     {
         "code": "professional",
@@ -94,6 +96,7 @@ PLAN_SEED: list[dict[str, Any]] = [
             "white_label",
         ],
         "sort_order": 2,
+        "description": "Integrations, white-label, and executive reporting",
     },
     {
         "code": "enterprise",
@@ -106,6 +109,7 @@ PLAN_SEED: list[dict[str, Any]] = [
         "trial_days": 30,
         "features": ["*"],
         "sort_order": 3,
+        "description": "Unlimited seats, SSO, custom domains, full platform",
     },
     {
         "code": "government",
@@ -254,7 +258,7 @@ async def list_plans(db: AsyncSession, *, public_only: bool = True) -> list[Subs
 
 
 async def get_or_create_subscription(
-    db: AsyncSession, organization_id: UUID, *, plan_code: str = "starter"
+    db: AsyncSession, organization_id: UUID, *, plan_code: str = "free"
 ) -> OrganizationSubscription:
     await ensure_plans(db)
     existing = await db.scalar(
@@ -290,8 +294,8 @@ async def change_subscription(
     db: AsyncSession,
     *,
     organization_id: UUID,
-    actor_id: UUID,
-    actor_email: str,
+    actor_id: Optional[UUID] = None,
+    actor_email: str = "",
     plan_code: str,
     billing_period: str = "monthly",
     seats: Optional[int] = None,
@@ -312,6 +316,11 @@ async def change_subscription(
         sub.coupon_code = coupon_code
         sub.discount_percent = 10 if coupon_code.upper().startswith("SAVE") else 0
     sub.status = "active"
+    # Zero-price plans stay internal; paid keep existing provider unless unset
+    price = plan.price_annual if billing_period == "annual" else plan.price_monthly
+    if plan.code == "free" or Decimal(str(price or 0)) <= 0:
+        sub.provider = "internal"
+        sub.provider_subscription_id = None
     now = utcnow()
     sub.current_period_start = now
     sub.current_period_end = now + timedelta(days=365 if billing_period == "annual" else 30)

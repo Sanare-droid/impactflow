@@ -2859,6 +2859,25 @@ class ApiClient {
     return this.request<Paginated<SubscriptionPlan>>("/billing/plans");
   }
 
+  listPublicBillingPlans() {
+    return fetch(`${API_V1}/public/billing/plans`)
+      .then(async (res) => {
+        if (!res.ok) {
+          const text = await res.text();
+          throw new Error(text || `HTTP ${res.status}`);
+        }
+        return res.json() as Promise<Paginated<SubscriptionPlan>>;
+      })
+      .catch((err: unknown) => {
+        if (err instanceof TypeError) {
+          throw new Error(
+            `Cannot reach API at ${API_URL}. Check NEXT_PUBLIC_API_URL.`,
+          );
+        }
+        throw err;
+      });
+  }
+
   getSubscription() {
     return this.request<OrganizationSubscription>("/billing/subscription");
   }
@@ -2869,10 +2888,24 @@ class ApiClient {
     seats?: number;
     coupon_code?: string;
   }) {
-    return this.request<OrganizationSubscription>("/billing/subscription/change", {
+    return this.request<
+      | OrganizationSubscription
+      | {
+          mode: string;
+          authorization_url?: string | null;
+          reference?: string | null;
+          subscription?: OrganizationSubscription;
+        }
+    >("/billing/subscription/change", {
       method: "POST",
       body: JSON.stringify(body),
     });
+  }
+
+  verifyPaystack(reference: string) {
+    return this.request<{ mode: string; subscription?: OrganizationSubscription }>(
+      `/billing/paystack/verify?reference=${encodeURIComponent(reference)}`,
+    );
   }
 
   getFeatures(environment = "production") {

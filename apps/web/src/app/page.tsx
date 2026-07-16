@@ -6,8 +6,56 @@ import { BrandLogo } from "@/components/brand-logo";
 const NAV = [
   { href: "#about", label: "About" },
   { href: "#work", label: "What we help" },
+  { href: "#pricing", label: "Pricing" },
   { href: "#stories", label: "Stories" },
   { href: "#reach", label: "Reach" },
+];
+
+const PRICING = [
+  {
+    code: "free",
+    name: "Free",
+    price: "$0",
+    period: "forever",
+    blurb: "Start measuring impact with core tools.",
+    features: ["3 seats", "Surveys & beneficiaries", "Basic reports", "Mobile field app"],
+    cta: "Start free",
+    href: "/register",
+    highlight: false,
+  },
+  {
+    code: "starter",
+    name: "Starter",
+    price: "$49",
+    period: "/month",
+    blurb: "Field teams and AI assist for growing NGOs.",
+    features: ["10 seats", "Workflows & AI", "Field operations", "14-day trial"],
+    cta: "Choose Starter",
+    href: "/register",
+    highlight: true,
+  },
+  {
+    code: "professional",
+    name: "Professional",
+    price: "$149",
+    period: "/month",
+    blurb: "Integrations, branding, and executive views.",
+    features: ["50 seats", "White-label", "Integrations hub", "Advanced reports"],
+    cta: "Choose Professional",
+    href: "/register",
+    highlight: false,
+  },
+  {
+    code: "enterprise",
+    name: "Enterprise",
+    price: "$499",
+    period: "/month",
+    blurb: "Unlimited scale with SSO and custom domains.",
+    features: ["Unlimited seats", "SSO", "Custom domains", "Full platform"],
+    cta: "Contact sales",
+    href: "/register",
+    highlight: false,
+  },
 ];
 
 const FOCUS = [
@@ -336,6 +384,70 @@ export default function HomePage() {
                 </Link>
               </div>
             </div>
+          </div>
+        </section>
+
+        {/* Pricing */}
+        <section id="pricing" className="border-t border-[#E8E2D6]/90 bg-[#FFFEFB]">
+          <div className="mx-auto w-full max-w-6xl px-5 py-16 md:px-8 md:py-24">
+            <div className="mx-auto max-w-2xl text-center">
+              <h2 className="font-display text-3xl font-semibold text-[#16324F] md:text-4xl">
+                Simple plans that grow with your programs
+              </h2>
+              <p className="mt-4 text-[#5A534B]">
+                Every workspace starts on <strong>Free</strong>. Upgrade when you need
+                AI, workflows, or white-label — paid plans checkout with Paystack.
+              </p>
+            </div>
+            <div className="mt-12 grid gap-6 md:grid-cols-2 xl:grid-cols-4">
+              {PRICING.map((plan) => (
+                <div
+                  key={plan.code}
+                  className={`flex flex-col border px-5 py-6 ${
+                    plan.highlight
+                      ? "border-[#16324F] bg-[#F7F4EC]"
+                      : "border-[#E8E2D6] bg-white"
+                  }`}
+                >
+                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#5C6B4A]">
+                    {plan.name}
+                  </p>
+                  <p className="font-display mt-3 text-3xl font-semibold text-[#16324F]">
+                    {plan.price}
+                    <span className="text-base font-normal text-[#7A7268]">
+                      {plan.period}
+                    </span>
+                  </p>
+                  <p className="mt-3 text-sm leading-relaxed text-[#5A534B]">
+                    {plan.blurb}
+                  </p>
+                  <ul className="mt-5 flex-1 space-y-2 text-sm text-[#3F3A34]">
+                    {plan.features.map((f) => (
+                      <li key={f} className="flex gap-2">
+                        <span className="text-[#2F5D3A]" aria-hidden>
+                          ✓
+                        </span>
+                        {f}
+                      </li>
+                    ))}
+                  </ul>
+                  <Link
+                    href={plan.href}
+                    className={`mt-6 inline-flex justify-center rounded-md px-4 py-2.5 text-sm font-semibold ${
+                      plan.highlight
+                        ? "bg-[#1B2A4A] text-white hover:bg-[#142238]"
+                        : "border border-[#1B2A4A] text-[#1B2A4A] hover:bg-[#F7F4EC]"
+                    }`}
+                  >
+                    {plan.cta}
+                  </Link>
+                </div>
+              ))}
+            </div>
+            <p className="mt-8 text-center text-xs text-[#8A8278]">
+              Prices shown in USD. Paystack charges in your configured currency
+              (e.g. NGN) at checkout.
+            </p>
           </div>
         </section>
 

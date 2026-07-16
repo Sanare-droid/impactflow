@@ -83,6 +83,13 @@ class Settings(BaseSettings):
     smtp_from: str = ""
     smtp_use_tls: bool = True
 
+    # Paystack billing (optional — without keys, plan changes stay internal)
+    paystack_secret_key: str = ""
+    paystack_public_key: str = ""
+    paystack_currency: str = "NGN"
+    # When plans are priced in USD and Paystack currency is NGN/GHS/KES
+    paystack_usd_to_local: float = 1600.0
+
     # Background jobs
     jobs_poll_seconds: int = 30
     jobs_enabled: bool = True
@@ -99,6 +106,10 @@ class Settings(BaseSettings):
             return from_addr
         # SMTP_USER for Resend is literally "resend" — not a valid From
         return "ImpactFlow <onboarding@resend.dev>"
+
+    @property
+    def paystack_enabled(self) -> bool:
+        return bool((self.paystack_secret_key or "").strip())
 
     @field_validator("backend_cors_origins", mode="before")
     @classmethod

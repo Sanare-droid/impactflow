@@ -1,26 +1,62 @@
 "use client";
 
-import { useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useSearchParams } from "next/navigation";
 import { api } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
 import { StatusBadge } from "@/components/ui/status-badge";
 
-export default function BillingPage() {
+function BillingInner() {
   const qc = useQueryClient();
+  const search = useSearchParams();
   const [period, setPeriod] = useState<"monthly" | "annual">("monthly");
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
 
   const plans = useQuery({ queryKey: ["billing-plans"], queryFn: () => api.listBillingPlans() });
   const sub = useQuery({ queryKey: ["subscription"], queryFn: () => api.getSubscription() });
   const features = useQuery({ queryKey: ["features"], queryFn: () => api.getFeatures() });
 
+  useEffect(() => {
+    const reference = search.get("reference") || search.get("trxref");
+    if (!reference) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        await api.verifyPaystack(reference);
+        if (!cancelled) {
+          setNotice("Payment confirmed — your plan is updated.");
+          setError(null);
+          await qc.invalidateQueries({ queryKey: ["subscription"] });
+          await qc.invalidateQueries({ queryKey: ["features"] });
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setError(err instanceof Error ? err.message : "Could not verify payment");
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [search, qc]);
+
   const change = useMutation({
     mutationFn: (plan_code: string) =>
       api.changeSubscription({ plan_code, billing_period: period }),
-    onSuccess: async () => {
+    onSuccess: async (result) => {
       setError(null);
+      if (result && typeof result === "object" && "authorization_url" in result) {
+        const url = (result as { authorization_url?: string | null }).authorization_url;
+        if (url) {
+          setNotice("Redirecting to Paystack…");
+          window.location.href = url;
+          return;
+        }
+      }
+      setNotice("Plan updated.");
       await qc.invalidateQueries({ queryKey: ["subscription"] });
       await qc.invalidateQueries({ queryKey: ["features"] });
     },
@@ -32,11 +68,12 @@ export default function BillingPage() {
       <div>
         <h1 className="font-display text-3xl font-semibold tracking-tight">Subscription</h1>
         <p className="mt-2 text-stone-500">
-          Provider-agnostic billing — Stripe-ready without coupling. Internal plans today.
+          Start on Free. Upgrade anytime — paid plans checkout via Paystack when configured.
         </p>
       </div>
 
       {error && <p className="text-sm text-rose-600">{error}</p>}
+      {notice && <p className="text-sm text-teal-700">{notice}</p>}
 
       <Card>
         <CardTitle>Current plan</CardTitle>
@@ -83,6 +120,7 @@ export default function BillingPage() {
         {(plans.data?.items ?? []).map((plan) => {
           const price = period === "annual" ? plan.price_annual : plan.price_monthly;
           const active = sub.data?.plan?.code === plan.code;
+          const isFree = Number(price) <= 0 || plan.code === "free";
           return (
             <Card key={plan.id} className={active ? "ring-2 ring-teal-600" : undefined}>
               <div className="flex items-start justify-between gap-3">
@@ -93,22 +131,36 @@ export default function BillingPage() {
                 {active && <StatusBadge status="active" />}
               </div>
               <p className="mt-4 font-display text-3xl font-semibold">
-                {plan.currency} {Number(price).toLocaleString()}
-                <span className="text-sm font-normal text-stone-500">
-                  /{period === "annual" ? "yr" : "mo"}
-                </span>
+                {isFree ? (
+                  "Free"
+                ) : (
+                  <>
+                    {plan.currency} {Number(price).toLocaleString()}
+                    <span className="text-sm font-normal text-stone-500">
+                      /{period === "annual" ? "yr" : "mo"}
+                    </span>
+                  </>
+                )}
               </p>
               <ul className="mt-3 space-y-1 text-sm text-stone-600 dark:text-stone-400">
                 <li>{plan.seat_limit ? `${plan.seat_limit} seats` : "Unlimited seats"}</li>
                 <li>{plan.storage_gb ? `${plan.storage_gb} GB storage` : "Custom storage"}</li>
-                <li>{plan.features.includes("*") ? "All platform features" : plan.features.slice(0, 4).join(", ")}</li>
+                <li>
+                  {plan.features.includes("*")
+                    ? "All platform features"
+                    : plan.features.slice(0, 4).join(", ")}
+                </li>
               </ul>
               <Button
                 className="mt-4"
-                disabled={active || change.isPending}
+                disabled={active || change.isPending || plan.code === "government"}
                 onClick={() => change.mutate(plan.code)}
               >
-                {active ? "Current plan" : "Switch plan"}
+                {active
+                  ? "Current plan"
+                  : isFree
+                    ? "Switch to Free"
+                    : "Upgrade with Paystack"}
               </Button>
             </Card>
           );
@@ -134,5 +186,13 @@ export default function BillingPage() {
         </div>
       </Card>
     </div>
+  );
+}
+
+export default function BillingPage() {
+  return (
+    <Suspense fallback={<p className="p-6 text-stone-500">Loading billing…</p>}>
+      <BillingInner />
+    </Suspense>
   );
 }

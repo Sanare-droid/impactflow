@@ -18,10 +18,16 @@ async def test_billing_plans_and_subscription(client: AsyncClient, org_a: dict):
     assert "enterprise" in codes
     assert "government" in codes
 
+    public = await client.get("/api/v1/public/billing/plans")
+    assert public.status_code == 200, public.text
+    public_codes = {p["code"] for p in public.json()["items"]}
+    assert "free" in public_codes
+    assert "government" not in public_codes
+
     sub = await client.get("/api/v1/billing/subscription", headers=headers)
     assert sub.status_code == 200, sub.text
     assert sub.json()["provider"] == "internal"
-    assert sub.json()["plan"]["code"] in codes
+    assert sub.json()["plan"]["code"] == "free"
 
     changed = await client.post(
         "/api/v1/billing/subscription/change",
@@ -34,6 +40,24 @@ async def test_billing_plans_and_subscription(client: AsyncClient, org_a: dict):
     assert body["billing_period"] == "annual"
     assert body["discount_percent"] == 10
 
+
+@pytest.mark.asyncio
+async def test_switch_to_free_plan(client: AsyncClient, org_a: dict):
+    headers = auth_headers(org_a["access_token"], org_a["organization_id"])
+    await client.post(
+        "/api/v1/billing/subscription/change",
+        headers=headers,
+        json={"plan_code": "starter"},
+    )
+    free = await client.post(
+        "/api/v1/billing/subscription/change",
+        headers=headers,
+        json={"plan_code": "free"},
+    )
+    assert free.status_code == 200, free.text
+    body = free.json()
+    assert body["plan"]["code"] == "free"
+    assert body["provider"] == "internal"
 
 @pytest.mark.asyncio
 async def test_feature_flags_resolve(client: AsyncClient, org_a: dict):

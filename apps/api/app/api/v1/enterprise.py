@@ -189,6 +189,18 @@ async def list_billing_plans(
     )
 
 
+@router.get("/public/billing/plans", response_model=PaginatedResponse[PlanResponse])
+async def public_billing_plans(
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> PaginatedResponse[PlanResponse]:
+    """Marketing / landing page catalog — no auth."""
+    rows = await ent.list_plans(db, public_only=True)
+    return PaginatedResponse(
+        items=[PlanResponse.model_validate(r) for r in rows],
+        meta=_meta(1, len(rows) or 1, len(rows)),
+    )
+
+
 @router.get("/billing/subscription")
 async def get_subscription(
     ctx: Annotated[RequestContext, Depends(require_permissions(*BILLING))],
@@ -202,6 +214,82 @@ async def get_subscription(
     return ent.subscription_payload(sub, plan)
 
 
+class PaystackCheckoutRequest(BaseModel):
+    plan_code: str = Field(min_length=1, max_length=64)
+    billing_period: str = Field(default="monthly", max_length=16)
+    callback_url: Optional[str] = Field(default=None, max_length=1024)
+
+
+@router.post("/billing/paystack/initialize")
+async def paystack_initialize(
+    body: PaystackCheckoutRequest,
+    request: Request,
+    ctx: Annotated[RequestContext, Depends(require_permissions(*BILLING_MANAGE))],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> dict[str, Any]:
+    from app.services import paystack as paystack_service
+
+    org_id = _require_org(ctx)
+    ip, ua = client_meta(request)
+    return await paystack_service.initialize_checkout(
+        db,
+        organization_id=org_id,
+        actor=ctx.user,
+        plan_code=body.plan_code,
+        billing_period=body.billing_period,
+        callback_url=body.callback_url,
+        ip_address=ip,
+        user_agent=ua,
+    )
+
+
+@router.get("/billing/paystack/verify")
+async def paystack_verify(
+    request: Request,
+    ctx: Annotated[RequestContext, Depends(require_permissions(*BILLING_MANAGE))],
+    db: Annotated[AsyncSession, Depends(get_db)],
+    reference: str = Query(min_length=4, max_length=128),
+) -> dict[str, Any]:
+    from app.services import paystack as paystack_service
+
+    _require_org(ctx)
+    return await paystack_service.verify_and_activate(
+        db,
+        reference=reference,
+        actor_id=ctx.user.id,
+        actor_email=ctx.user.email,
+    )
+
+
+@router.post("/billing/paystack/webhook")
+async def paystack_webhook(
+    request: Request,
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> dict[str, Any]:
+    from app.core.config import settings
+    from app.services import paystack as paystack_service
+
+    raw = await request.body()
+    signature = request.headers.get("x-paystack-signature")
+    if settings.paystack_enabled and not paystack_service.verify_webhook_signature(
+        raw, signature
+    ):
+        from fastapi import HTTPException
+
+        raise HTTPException(status_code=401, detail="Invalid Paystack signature")
+    import json
+
+    try:
+        event = json.loads(raw.decode("utf-8") or "{}")
+    except json.JSONDecodeError:
+        from fastapi import HTTPException
+
+        raise HTTPException(status_code=400, detail="Invalid JSON")
+    result = await paystack_service.handle_webhook_event(db, event)
+    await db.commit()
+    return result
+
+
 @router.post("/billing/subscription/change")
 async def change_plan(
     body: ChangePlanRequest,
@@ -209,8 +297,30 @@ async def change_plan(
     ctx: Annotated[RequestContext, Depends(require_permissions(*BILLING_MANAGE))],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> dict[str, Any]:
+    """
+    Switch plan. Free/zero plans activate immediately.
+    Paid plans use Paystack checkout when configured; otherwise internal (dev).
+    """
+    from app.core.config import settings
+    from app.services import paystack as paystack_service
+
     org_id = _require_org(ctx)
     ip, ua = client_meta(request)
+
+    # Prefer Paystack path for paid upgrades when keys are set
+    if settings.paystack_enabled and body.plan_code not in {"free", "government"}:
+        checkout = await paystack_service.initialize_checkout(
+            db,
+            organization_id=org_id,
+            actor=ctx.user,
+            plan_code=body.plan_code,
+            billing_period=body.billing_period,
+            ip_address=ip,
+            user_agent=ua,
+        )
+        if checkout.get("mode") == "checkout":
+            return checkout
+
     sub = await ent.change_subscription(
         db,
         organization_id=org_id,
