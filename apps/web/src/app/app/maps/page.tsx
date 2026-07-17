@@ -1,12 +1,20 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
 import { Input, Label } from "@/components/ui/input";
 import { StatusBadge } from "@/components/ui/status-badge";
+
+type GeoPoint = {
+  id: string;
+  name: string;
+  lat: number;
+  lng: number;
+  layer: string;
+};
 
 export default function MapsPage() {
   const qc = useQueryClient();
@@ -57,6 +65,22 @@ export default function MapsPage() {
     onError: (err: Error) => setError(err.message),
   });
 
+  const points = useMemo(
+    () =>
+      (data?.items ?? []).flatMap((layer) =>
+        (layer.features ?? [])
+          .filter((f) => f.latitude != null && f.longitude != null)
+          .map((f) => ({
+            id: f.id,
+            name: f.name,
+            lat: Number(f.latitude),
+            lng: Number(f.longitude),
+            layer: layer.name,
+          })),
+      ),
+    [data],
+  );
+
   return (
     <div className="animate-fade-up space-y-6">
       <div>
@@ -64,8 +88,7 @@ export default function MapsPage() {
           Geo registry
         </h1>
         <p className="mt-2 text-stone-500">
-          Site and coverage layers with point features. Plot below is a simple
-          lat/lng canvas (not a full tile map).
+          Site and coverage layers with point features on an OpenStreetMap basemap.
         </p>
       </div>
 
@@ -161,23 +184,11 @@ export default function MapsPage() {
       {error && <p className="text-sm text-rose-600">{error}</p>}
 
       <Card>
-        <CardTitle>Point plot</CardTitle>
+        <CardTitle>Map</CardTitle>
         <CardDescription>
-          Normalized projection of registered coordinates (north-up).
+          OpenStreetMap tiles with registered site markers. © OpenStreetMap contributors.
         </CardDescription>
-        <GeoPlot
-          points={(data?.items ?? []).flatMap((layer) =>
-            (layer.features ?? [])
-              .filter((f) => f.latitude != null && f.longitude != null)
-              .map((f) => ({
-                id: f.id,
-                name: f.name,
-                lat: Number(f.latitude),
-                lng: Number(f.longitude),
-                layer: layer.name,
-              })),
-          )}
-        />
+        <TileMap points={points} />
       </Card>
 
       <Card>
@@ -216,46 +227,91 @@ export default function MapsPage() {
   );
 }
 
-function GeoPlot({
-  points,
-}: {
-  points: Array<{ id: string; name: string; lat: number; lng: number; layer: string }>;
-}) {
-  if (points.length === 0) {
-    return (
-      <p className="mt-4 text-sm text-stone-400">
-        Add latitude/longitude features to see them plotted here.
-      </p>
-    );
-  }
-  const lats = points.map((p) => p.lat);
-  const lngs = points.map((p) => p.lng);
-  const minLat = Math.min(...lats);
-  const maxLat = Math.max(...lats);
-  const minLng = Math.min(...lngs);
-  const maxLng = Math.max(...lngs);
-  const pad = 0.05;
-  const dLat = Math.max(maxLat - minLat, 0.01);
-  const dLng = Math.max(maxLng - minLng, 0.01);
-  const w = 640;
-  const h = 320;
+function lng2tile(lng: number, zoom: number) {
+  return ((lng + 180) / 360) * 2 ** zoom;
+}
+
+function lat2tile(lat: number, zoom: number) {
+  const rad = (lat * Math.PI) / 180;
   return (
-    <svg
-      viewBox={`0 0 ${w} ${h}`}
-      className="mt-4 w-full rounded-xl border border-stone-200 bg-[linear-gradient(180deg,#ecfdf5_0%,#fafaf9_100%)] dark:border-stone-800 dark:bg-stone-950"
-      role="img"
-      aria-label="Geo point plot"
+    ((1 - Math.log(Math.tan(rad) + 1 / Math.cos(rad)) / Math.PI) / 2) * 2 ** zoom
+  );
+}
+
+function TileMap({ points }: { points: GeoPoint[] }) {
+  const zoom = 6;
+  const tileSize = 256;
+  const viewW = 640;
+  const viewH = 360;
+
+  const center = useMemo(() => {
+    if (points.length === 0) return { lat: -1.2921, lng: 36.8219 }; // Nairobi default
+    return {
+      lat: points.reduce((s, p) => s + p.lat, 0) / points.length,
+      lng: points.reduce((s, p) => s + p.lng, 0) / points.length,
+    };
+  }, [points]);
+
+  const centerTileX = lng2tile(center.lng, zoom);
+  const centerTileY = lat2tile(center.lat, zoom);
+  const originX = centerTileX * tileSize - viewW / 2;
+  const originY = centerTileY * tileSize - viewH / 2;
+
+  const minTX = Math.floor(originX / tileSize);
+  const maxTX = Math.floor((originX + viewW) / tileSize);
+  const minTY = Math.floor(originY / tileSize);
+  const maxTY = Math.floor((originY + viewH) / tileSize);
+
+  const tiles: Array<{ x: number; y: number; left: number; top: number }> = [];
+  for (let x = minTX; x <= maxTX; x++) {
+    for (let y = minTY; y <= maxTY; y++) {
+      if (y < 0 || y >= 2 ** zoom) continue;
+      tiles.push({
+        x: ((x % 2 ** zoom) + 2 ** zoom) % 2 ** zoom,
+        y,
+        left: x * tileSize - originX,
+        top: y * tileSize - originY,
+      });
+    }
+  }
+
+  return (
+    <div
+      className="relative mt-4 overflow-hidden rounded-xl border border-stone-200 dark:border-stone-800"
+      style={{ height: viewH }}
     >
+      <div className="absolute inset-0 bg-stone-100 dark:bg-stone-900">
+        {tiles.map((t) => (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            key={`${t.x}-${t.y}`}
+            alt=""
+            draggable={false}
+            className="pointer-events-none absolute"
+            style={{ left: t.left, top: t.top, width: tileSize, height: tileSize }}
+            src={`https://tile.openstreetmap.org/${zoom}/${t.x}/${t.y}.png`}
+          />
+        ))}
+      </div>
       {points.map((p) => {
-        const x = ((p.lng - minLng) / dLng) * (w * (1 - 2 * pad)) + w * pad;
-        const y = h - (((p.lat - minLat) / dLat) * (h * (1 - 2 * pad)) + h * pad);
+        const px = lng2tile(p.lng, zoom) * tileSize - originX;
+        const py = lat2tile(p.lat, zoom) * tileSize - originY;
         return (
-          <g key={p.id}>
-            <circle cx={x} cy={y} r={6} fill="#0F766E" />
-            <title>{`${p.name} (${p.layer})`}</title>
-          </g>
+          <div
+            key={p.id}
+            title={`${p.name} (${p.layer})`}
+            className="absolute z-10 -translate-x-1/2 -translate-y-full"
+            style={{ left: px, top: py }}
+          >
+            <span className="block h-3 w-3 rounded-full border-2 border-white bg-teal-700 shadow" />
+          </div>
         );
       })}
-    </svg>
+      {points.length === 0 && (
+        <p className="absolute inset-x-0 bottom-3 z-10 text-center text-sm text-stone-600">
+          Add latitude/longitude features to plot markers on the basemap.
+        </p>
+      )}
+    </div>
   );
 }

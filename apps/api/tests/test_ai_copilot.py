@@ -7,7 +7,7 @@ from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.services import ai_tools
-from tests.conftest import auth_headers
+from tests.conftest import auth_headers, unlock_plan_features
 
 
 def test_select_tools_beneficiary_query_includes_search_beneficiaries():
@@ -54,6 +54,7 @@ async def test_run_tools_is_tenant_scoped(
 async def test_send_message_returns_citations_in_metadata(
     client: AsyncClient, org_a: dict
 ):
+    await unlock_plan_features(client, org_a)
     headers = auth_headers(org_a["access_token"], org_a["organization_id"])
 
     # Seed a program so the copilot has something to cite.
@@ -109,6 +110,7 @@ async def test_dashboard_insights_returns_required_keys(
 async def test_cross_tenant_conversation_access_404(
     client: AsyncClient, org_a: dict, org_b: dict
 ):
+    await unlock_plan_features(client, org_a)
     headers_a = auth_headers(org_a["access_token"], org_a["organization_id"])
     conv = await client.post(
         "/api/v1/ai/conversations", headers=headers_a, json={"title": "Alpha"}
@@ -137,6 +139,7 @@ async def test_suggested_questions_ok(client: AsyncClient, org_a: dict):
 async def test_regenerate_does_not_duplicate_user_message(
     client: AsyncClient, org_a: dict
 ):
+    await unlock_plan_features(client, org_a)
     headers = auth_headers(org_a["access_token"], org_a["organization_id"])
     conv = await client.post(
         "/api/v1/ai/conversations", headers=headers, json={"title": "Regenerate"}
@@ -167,6 +170,7 @@ async def test_regenerate_does_not_duplicate_user_message(
 
 @pytest.mark.asyncio
 async def test_pin_conversation(client: AsyncClient, org_a: dict):
+    await unlock_plan_features(client, org_a)
     headers = auth_headers(org_a["access_token"], org_a["organization_id"])
     conv = await client.post(
         "/api/v1/ai/conversations", headers=headers, json={"title": "Pin me"}
@@ -209,6 +213,7 @@ async def test_generate_report_returns_markdown(client: AsyncClient, org_a: dict
 
 @pytest.mark.asyncio
 async def test_message_feedback(client: AsyncClient, org_a: dict):
+    await unlock_plan_features(client, org_a)
     headers = auth_headers(org_a["access_token"], org_a["organization_id"])
     conv = await client.post(
         "/api/v1/ai/conversations", headers=headers, json={"title": "Feedback"}

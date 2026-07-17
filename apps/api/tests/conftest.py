@@ -101,6 +101,22 @@ def auth_headers(access_token: str, organization_id: str | UUID) -> dict[str, st
     }
 
 
+async def unlock_plan_features(
+    client: AsyncClient,
+    org: dict[str, Any],
+    *,
+    plan_code: str = "professional",
+) -> None:
+    """Move a test org off Free Trial so AI / workflows / marketplace features resolve."""
+    headers = auth_headers(org["access_token"], org["organization_id"])
+    res = await client.post(
+        "/api/v1/billing/subscription/change",
+        headers=headers,
+        json={"plan_code": plan_code},
+    )
+    assert res.status_code == 200, res.text
+
+
 @pytest.fixture
 async def org_a(client: AsyncClient) -> dict[str, Any]:
     return await register_org(

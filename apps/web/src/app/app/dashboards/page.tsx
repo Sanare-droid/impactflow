@@ -17,6 +17,16 @@ const METRIC_OPTIONS = [
   "surveys_count",
 ] as const;
 
+type WidgetType = "metric" | "chart" | "table";
+
+type DashWidget = {
+  id?: string;
+  type?: string;
+  metric?: string;
+  metrics?: string[];
+  title?: string;
+};
+
 export default function DashboardsPage() {
   const qc = useQueryClient();
   const [name, setName] = useState("");
@@ -24,6 +34,7 @@ export default function DashboardsPage() {
   const [error, setError] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [widgetMetric, setWidgetMetric] = useState<string>(METRIC_OPTIONS[0]);
+  const [widgetType, setWidgetType] = useState<WidgetType>("metric");
 
   const { data, isLoading } = useQuery({
     queryKey: ["saved-dashboards"],
@@ -49,6 +60,12 @@ export default function DashboardsPage() {
           { id: "programs", type: "metric", metric: "programs_count" },
           { id: "indicators", type: "metric", metric: "active_indicators_count" },
           { id: "beneficiaries", type: "metric", metric: "active_beneficiaries_count" },
+          {
+            id: "overview-chart",
+            type: "chart",
+            title: "Delivery overview",
+            metrics: ["programs_count", "projects_count", "open_tasks_count"],
+          },
         ],
       }),
     onSuccess: async (created) => {
@@ -65,14 +82,26 @@ export default function DashboardsPage() {
   const addWidget = useMutation({
     mutationFn: async () => {
       if (!selected) throw new Error("Select a dashboard");
-      const widgets = [
-        ...(selected.widgets ?? []),
-        {
-          id: `w-${Date.now()}`,
-          type: "metric",
-          metric: widgetMetric,
-        },
-      ];
+      const id = `w-${Date.now()}`;
+      let next: DashWidget;
+      if (widgetType === "chart") {
+        next = {
+          id,
+          type: "chart",
+          title: "Metric chart",
+          metrics: [widgetMetric, ...METRIC_OPTIONS.filter((m) => m !== widgetMetric).slice(0, 3)],
+        };
+      } else if (widgetType === "table") {
+        next = {
+          id,
+          type: "table",
+          title: "Metrics table",
+          metrics: [...METRIC_OPTIONS],
+        };
+      } else {
+        next = { id, type: "metric", metric: widgetMetric };
+      }
+      const widgets = [...(selected.widgets ?? []), next];
       return api.updateSavedDashboard(selected.id, { widgets });
     },
     onSuccess: async () => {
@@ -89,18 +118,23 @@ export default function DashboardsPage() {
     return typeof val === "number" || typeof val === "string" ? val : "—";
   }
 
+  function numericMetric(metric: string): number {
+    const v = metricValue(metric);
+    return typeof v === "number" ? v : 0;
+  }
+
   return (
     <div className="animate-fade-up space-y-6">
       <div>
         <h1 className="font-display text-3xl font-semibold tracking-tight">Dashboards</h1>
         <p className="mt-2 text-stone-500">
-          View saved layouts and add metric widgets for program and MEAL oversight.
+          Saved layouts with metric, chart, and table widgets for program and MEAL oversight.
         </p>
       </div>
 
       <Card>
         <CardTitle>Create dashboard</CardTitle>
-        <CardDescription>Starts with a default delivery / MEAL / field widget set.</CardDescription>
+        <CardDescription>Starts with metrics plus an overview chart.</CardDescription>
         <form
           className="mt-4 grid gap-3"
           onSubmit={(e: FormEvent) => {
@@ -159,7 +193,7 @@ export default function DashboardsPage() {
             <div>
               <CardTitle>{selected?.name ?? "Select a dashboard"}</CardTitle>
               <CardDescription>
-                {selected?.description || "Live metric widgets from workspace stats."}
+                {selected?.description || "Live widgets from workspace stats."}
               </CardDescription>
             </div>
             {selected ? <StatusBadge status={selected.status} /> : null}
@@ -167,12 +201,111 @@ export default function DashboardsPage() {
 
           {selected ? (
             <>
-              <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                {(selected.widgets ?? []).map((w) => {
-                  const metric = String((w as { metric?: string }).metric ?? "programs_count");
+              <div className="mt-5 grid gap-4 lg:grid-cols-2">
+                {(selected.widgets ?? []).map((raw) => {
+                  const w = raw as DashWidget;
+                  const key = String(w.id ?? w.metric ?? Math.random());
+                  if (w.type === "chart") {
+                    const metrics = (w.metrics?.length ? w.metrics : [w.metric || "programs_count"]).filter(
+                      Boolean,
+                    ) as string[];
+                    const values = metrics.map((m) => numericMetric(m));
+                    const max = Math.max(...values, 1);
+                    return (
+                      <div
+                        key={key}
+                        className="rounded-2xl border border-stone-200 bg-white p-4 dark:border-stone-800 dark:bg-stone-950 lg:col-span-2"
+                      >
+                        <p className="text-xs uppercase tracking-wide text-stone-400">
+                          {w.title || "Chart"}
+                        </p>
+                        <svg
+                          viewBox="0 0 480 180"
+                          className="mt-3 w-full"
+                          role="img"
+                          aria-label={w.title || "Chart"}
+                        >
+                          {metrics.map((m, i) => {
+                            const barW = 480 / metrics.length - 16;
+                            const x = i * (480 / metrics.length) + 8;
+                            const h = (values[i] / max) * 120;
+                            const y = 140 - h;
+                            return (
+                              <g key={m}>
+                                <rect
+                                  x={x}
+                                  y={y}
+                                  width={barW}
+                                  height={h}
+                                  rx={6}
+                                  fill="#0F766E"
+                                  opacity={0.85}
+                                />
+                                <text
+                                  x={x + barW / 2}
+                                  y={156}
+                                  textAnchor="middle"
+                                  className="fill-stone-500"
+                                  fontSize="10"
+                                >
+                                  {m.replaceAll("_", " ").slice(0, 14)}
+                                </text>
+                                <text
+                                  x={x + barW / 2}
+                                  y={y - 6}
+                                  textAnchor="middle"
+                                  className="fill-stone-700"
+                                  fontSize="11"
+                                >
+                                  {values[i]}
+                                </text>
+                              </g>
+                            );
+                          })}
+                        </svg>
+                      </div>
+                    );
+                  }
+                  if (w.type === "table") {
+                    const metrics = (w.metrics?.length ? w.metrics : [...METRIC_OPTIONS]) as string[];
+                    return (
+                      <div
+                        key={key}
+                        className="rounded-2xl border border-stone-200 bg-white p-4 dark:border-stone-800 dark:bg-stone-950 lg:col-span-2"
+                      >
+                        <p className="text-xs uppercase tracking-wide text-stone-400">
+                          {w.title || "Table"}
+                        </p>
+                        <table className="mt-3 w-full text-left text-sm">
+                          <thead>
+                            <tr className="border-b border-stone-200 text-stone-500 dark:border-stone-800">
+                              <th className="py-2 font-medium">Metric</th>
+                              <th className="py-2 font-medium">Value</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {metrics.map((m) => (
+                              <tr
+                                key={m}
+                                className="border-b border-stone-100 last:border-0 dark:border-stone-900"
+                              >
+                                <td className="py-2 capitalize text-stone-600 dark:text-stone-300">
+                                  {m.replaceAll("_", " ")}
+                                </td>
+                                <td className="py-2 font-display text-lg font-semibold">
+                                  {metricValue(m)}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    );
+                  }
+                  const metric = String(w.metric ?? "programs_count");
                   return (
                     <div
-                      key={String((w as { id?: string }).id ?? metric)}
+                      key={key}
                       className="rounded-2xl border border-stone-200 bg-gradient-to-br from-teal-50/80 to-white p-4 dark:border-stone-800 dark:from-stone-900 dark:to-stone-950"
                     >
                       <p className="text-xs uppercase tracking-wide text-stone-400">
@@ -193,20 +326,35 @@ export default function DashboardsPage() {
                 }}
               >
                 <div>
-                  <Label htmlFor="metric">Add metric widget</Label>
+                  <Label htmlFor="wtype">Widget type</Label>
                   <select
-                    id="metric"
+                    id="wtype"
                     className="mt-1 rounded-xl border border-stone-200 bg-white px-3 py-2 text-sm dark:border-stone-800 dark:bg-stone-950"
-                    value={widgetMetric}
-                    onChange={(e) => setWidgetMetric(e.target.value)}
+                    value={widgetType}
+                    onChange={(e) => setWidgetType(e.target.value as WidgetType)}
                   >
-                    {METRIC_OPTIONS.map((m) => (
-                      <option key={m} value={m}>
-                        {m}
-                      </option>
-                    ))}
+                    <option value="metric">Metric</option>
+                    <option value="chart">Chart</option>
+                    <option value="table">Table</option>
                   </select>
                 </div>
+                {widgetType !== "table" && (
+                  <div>
+                    <Label htmlFor="metric">Primary metric</Label>
+                    <select
+                      id="metric"
+                      className="mt-1 rounded-xl border border-stone-200 bg-white px-3 py-2 text-sm dark:border-stone-800 dark:bg-stone-950"
+                      value={widgetMetric}
+                      onChange={(e) => setWidgetMetric(e.target.value)}
+                    >
+                      {METRIC_OPTIONS.map((m) => (
+                        <option key={m} value={m}>
+                          {m}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
                 <Button type="submit" disabled={addWidget.isPending}>
                   {addWidget.isPending ? "Adding…" : "Add widget"}
                 </Button>

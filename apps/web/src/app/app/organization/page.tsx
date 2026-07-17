@@ -18,6 +18,10 @@ export default function OrganizationAdminPage() {
   const [retentionDays, setRetentionDays] = useState("365");
   const [issuer, setIssuer] = useState("");
   const [clientId, setClientId] = useState("");
+  const [ssoProvider, setSsoProvider] = useState<"oidc" | "saml">("oidc");
+  const [samlSsoUrl, setSamlSsoUrl] = useState("");
+  const [samlSpEntity, setSamlSpEntity] = useState("");
+  const [samlIdpEntity, setSamlIdpEntity] = useState("");
 
   const org = useQuery({ queryKey: ["organization"], queryFn: () => api.currentOrganization() });
   const domains = useQuery({ queryKey: ["domains"], queryFn: () => api.listDomains() });
@@ -73,12 +77,28 @@ export default function OrganizationAdminPage() {
   });
 
   const sso = useMutation({
-    mutationFn: () =>
-      api.upsertSso({
+    mutationFn: () => {
+      if (ssoProvider === "saml") {
+        return api.upsertSso({
+          provider: "saml",
+          config: {
+            sso_url: samlSsoUrl,
+            sp_entity_id: samlSpEntity || undefined,
+            idp_entity_id: samlIdpEntity || undefined,
+            acs_url:
+              typeof window !== "undefined"
+                ? `${window.location.origin}/sso/saml`
+                : undefined,
+          },
+          allowed_domains: [],
+        });
+      }
+      return api.upsertSso({
         provider: "oidc",
         config: { issuer, client_id: clientId },
         allowed_domains: [],
-      }),
+      });
+    },
     onError: (err: Error) => setError(err.message),
   });
 
@@ -234,24 +254,73 @@ export default function OrganizationAdminPage() {
 
       <Card>
         <CardTitle>SSO foundation</CardTitle>
-        <CardDescription>OIDC / SAML / Azure AD / Google Workspace ready — secrets encrypted.</CardDescription>
-        <div className="mt-4 grid gap-3 sm:grid-cols-2">
-          <div>
-            <Label htmlFor="issuer">Issuer URL</Label>
-            <Input id="issuer" value={issuer} onChange={(e) => setIssuer(e.target.value)} />
-          </div>
-          <div>
-            <Label htmlFor="client">Client ID</Label>
-            <Input id="client" value={clientId} onChange={(e) => setClientId(e.target.value)} />
-          </div>
+        <CardDescription>
+          Configure OIDC or SAML 2.0. Secrets stay encrypted; ACS for SAML is{" "}
+          <span className="font-mono text-xs">/sso/saml</span>.
+        </CardDescription>
+        <div className="mt-4">
+          <Label htmlFor="sso-provider">Provider</Label>
+          <select
+            id="sso-provider"
+            className="mt-1 w-full max-w-xs rounded-xl border border-stone-200 bg-white px-3 py-2 text-sm dark:border-stone-800 dark:bg-stone-950"
+            value={ssoProvider}
+            onChange={(e) => setSsoProvider(e.target.value as "oidc" | "saml")}
+          >
+            <option value="oidc">OIDC</option>
+            <option value="saml">SAML 2.0</option>
+          </select>
         </div>
+        {ssoProvider === "oidc" ? (
+          <div className="mt-4 grid gap-3 sm:grid-cols-2">
+            <div>
+              <Label htmlFor="issuer">Issuer URL</Label>
+              <Input id="issuer" value={issuer} onChange={(e) => setIssuer(e.target.value)} />
+            </div>
+            <div>
+              <Label htmlFor="client">Client ID</Label>
+              <Input id="client" value={clientId} onChange={(e) => setClientId(e.target.value)} />
+            </div>
+          </div>
+        ) : (
+          <div className="mt-4 grid gap-3 sm:grid-cols-2">
+            <div className="sm:col-span-2">
+              <Label htmlFor="saml-sso">IdP SSO URL</Label>
+              <Input
+                id="saml-sso"
+                value={samlSsoUrl}
+                onChange={(e) => setSamlSsoUrl(e.target.value)}
+                placeholder="https://idp.example.com/sso/saml"
+              />
+            </div>
+            <div>
+              <Label htmlFor="saml-sp">SP entity ID</Label>
+              <Input
+                id="saml-sp"
+                value={samlSpEntity}
+                onChange={(e) => setSamlSpEntity(e.target.value)}
+                placeholder="https://app.impactflow.ai"
+              />
+            </div>
+            <div>
+              <Label htmlFor="saml-idp">IdP entity ID (optional)</Label>
+              <Input
+                id="saml-idp"
+                value={samlIdpEntity}
+                onChange={(e) => setSamlIdpEntity(e.target.value)}
+              />
+            </div>
+          </div>
+        )}
         <Button
           className="mt-3"
           variant="secondary"
-          disabled={!issuer || !clientId || sso.isPending}
+          disabled={
+            sso.isPending ||
+            (ssoProvider === "oidc" ? !issuer || !clientId : !samlSsoUrl)
+          }
           onClick={() => sso.mutate()}
         >
-          Save OIDC draft
+          {ssoProvider === "saml" ? "Save SAML draft" : "Save OIDC draft"}
         </Button>
       </Card>
 

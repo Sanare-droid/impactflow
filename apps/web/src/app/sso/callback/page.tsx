@@ -13,6 +13,39 @@ function SsoCallbackInner() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    const queryError = params.get("error");
+    if (queryError) {
+      setError(queryError);
+      return;
+    }
+
+    // SAML ACS redirect places tokens in the URL fragment
+    const hash = typeof window !== "undefined" ? window.location.hash.replace(/^#/, "") : "";
+    if (hash.includes("access_token=")) {
+      const hp = new URLSearchParams(hash);
+      const access = hp.get("access_token");
+      const refresh = hp.get("refresh_token");
+      const orgId = hp.get("organization_id");
+      if (access && refresh) {
+        void (async () => {
+          try {
+            api.setSession({
+              access_token: access,
+              refresh_token: refresh,
+              organization_id: orgId || undefined,
+            });
+            const me = await api.me();
+            setUser(me);
+            window.history.replaceState(null, "", "/sso/callback");
+            router.replace("/app");
+          } catch (err) {
+            setError(err instanceof Error ? err.message : "SSO login failed");
+          }
+        })();
+        return;
+      }
+    }
+
     const code = params.get("code");
     const state = params.get("state");
     if (!code || !state) {
@@ -46,7 +79,7 @@ function SsoCallbackInner() {
       <Card className="w-full max-w-md">
         <CardTitle>Completing SSO…</CardTitle>
         <CardDescription>
-          {error ?? "Exchanging authorization code for an ImpactFlow session."}
+          {error ?? "Finishing your organization SSO sign-in."}
         </CardDescription>
       </Card>
     </div>

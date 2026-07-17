@@ -186,7 +186,7 @@ export default function LoginPage() {
           </Button>
         </form>
         <p className="mt-2 text-xs text-stone-500">
-          SSO requires your organization slug and an active OIDC config.
+          SSO requires your organization slug and an active OIDC or SAML config.
         </p>
         <p className="mt-4 text-sm text-stone-500">
           <Link className="text-teal-700 underline dark:text-teal-300" href="/forgot-password">

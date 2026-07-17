@@ -967,11 +967,12 @@ async def start_sso_login(
     organization_slug: str,
     redirect_uri: str,
 ) -> dict:
-    """Build OIDC authorize URL for an organization's SSO configuration."""
+    """Build OIDC or SAML authorize URL for an organization's SSO configuration."""
     from urllib.parse import urlencode
     from uuid import uuid4
 
     from app.models.enterprise import SsoConfiguration
+    from app.services.saml import build_authn_request_redirect
 
     slug = organization_slug.strip().lower()
     org = await db.scalar(select(Organization).where(Organization.slug == slug))
@@ -980,12 +981,45 @@ async def start_sso_login(
     sso = await db.scalar(
         select(SsoConfiguration).where(
             SsoConfiguration.organization_id == org.id,
-            SsoConfiguration.status.in_(("active", "enabled", "draft")),
+            SsoConfiguration.status.in_(
+                ("active", "enabled", "draft", "configured")
+            ),
         )
     )
     if not sso:
         raise NotFoundError("SSO is not configured for this organization")
     cfg = dict(sso.config or {})
+    state = f"{org.id}:{uuid4().hex}"
+    meta = dict(sso.metadata_ or {})
+    meta["pending_oauth_state"] = state
+    meta["pending_redirect_uri"] = redirect_uri
+    sso.metadata_ = meta
+    await db.flush()
+
+    provider = (sso.provider or "oidc").lower()
+    if provider == "saml":
+        sso_url = cfg.get("sso_url") or cfg.get("idp_sso_url") or cfg.get("login_url")
+        sp_entity = cfg.get("sp_entity_id") or cfg.get("entity_id") or settings.frontend_url
+        # Browser ACS lives on the web app so IdPs can HTTP-POST without CORS issues.
+        acs_url = cfg.get("acs_url") or f"{settings.frontend_url.rstrip('/')}/sso/saml"
+        if not sso_url:
+            raise AppError(
+                "SAML config missing sso_url (IdP single sign-on URL)",
+                code="sso_misconfigured",
+            )
+        authorize_url = build_authn_request_redirect(
+            sso_url=sso_url,
+            sp_entity_id=sp_entity,
+            acs_url=acs_url,
+            relay_state=state,
+        )
+        return {
+            "authorize_url": authorize_url,
+            "state": state,
+            "organization_id": str(org.id),
+            "provider": "saml",
+        }
+
     authorize = cfg.get("authorize_url") or cfg.get("authorization_endpoint")
     client_id = cfg.get("client_id")
     if not authorize or not client_id:
@@ -993,12 +1027,6 @@ async def start_sso_login(
             "SSO config missing authorize_url / client_id",
             code="sso_misconfigured",
         )
-    state = f"{org.id}:{uuid4().hex}"
-    meta = dict(sso.metadata_ or {})
-    meta["pending_oauth_state"] = state
-    meta["pending_redirect_uri"] = redirect_uri
-    sso.metadata_ = meta
-    await db.flush()
     scopes = cfg.get("scopes") or ["openid", "email", "profile"]
     if isinstance(scopes, str):
         scope = scopes
@@ -1139,6 +1167,100 @@ async def complete_sso_login(
         actor_id=user.id,
         actor_email=user.email,
         description=f"SSO login via {sso.provider}",
+        ip_address=ip_address,
+        user_agent=user_agent,
+    )
+    org = await db.get(Organization, org_id)
+    return {
+        "access_token": access_token,
+        "refresh_token": refresh_token,
+        "token_type": "bearer",
+        "expires_in": settings.access_token_expire_minutes * 60,
+        "mfa_required": False,
+        "user": user,
+        "organization": org,
+    }
+
+
+async def complete_saml_login(
+    db: AsyncSession,
+    *,
+    saml_response: str,
+    relay_state: str,
+    ip_address: Optional[str] = None,
+    user_agent: Optional[str] = None,
+) -> dict:
+    """Parse SAMLResponse from IdP ACS POST and issue ImpactFlow tokens."""
+    from app.models.enterprise import SsoConfiguration
+    from app.services.saml import parse_saml_response_email
+
+    parts = (relay_state or "").split(":")
+    if len(parts) < 1:
+        raise AppError("Invalid SAML RelayState", code="VALIDATION_ERROR")
+    try:
+        org_id = UUID(parts[0])
+    except ValueError as exc:
+        raise AppError("Invalid SAML RelayState", code="VALIDATION_ERROR") from exc
+
+    sso = await db.scalar(
+        select(SsoConfiguration).where(
+            SsoConfiguration.organization_id == org_id,
+            SsoConfiguration.provider == "saml",
+        )
+    )
+    if not sso:
+        raise NotFoundError("SSO configuration not found")
+    if (sso.provider or "").lower() != "saml":
+        raise AppError("Organization has no SAML SSO configuration", code="sso_misconfigured")
+
+    meta = dict(sso.metadata_ or {})
+    if meta.get("pending_oauth_state") and meta["pending_oauth_state"] != relay_state:
+        raise AppError("SAML RelayState mismatch", code="sso_state_mismatch")
+
+    cfg = dict(sso.config or {})
+    sp_entity = cfg.get("sp_entity_id") or cfg.get("entity_id") or settings.frontend_url
+    try:
+        email = parse_saml_response_email(
+            saml_response,
+            expected_audience=sp_entity,
+        )
+    except ValueError as exc:
+        raise AppError(str(exc), code="sso_exchange_failed") from exc
+
+    user = await db.scalar(select(User).where(User.email == email))
+    if not user:
+        raise ForbiddenError(
+            "No ImpactFlow account for this SSO email. Ask an admin to invite you first."
+        )
+    permissions, role, membership = await get_user_permissions(db, user.id, org_id)
+    if not membership:
+        raise ForbiddenError("You are not a member of this organization")
+    roles = [role.slug] if role else []
+
+    user.last_login_at = utcnow()
+    access_token, refresh_token = await issue_tokens(
+        db,
+        user=user,
+        organization_id=org_id,
+        roles=roles,
+        permissions=permissions,
+        ip_address=ip_address,
+        user_agent=user_agent,
+        mfa_verified=True,
+    )
+    meta.pop("pending_oauth_state", None)
+    sso.metadata_ = meta
+    sso.status = "active"
+    await db.flush()
+    await write_audit_log(
+        db,
+        action="auth.sso_login",
+        resource_type="user",
+        resource_id=user.id,
+        organization_id=org_id,
+        actor_id=user.id,
+        actor_email=user.email,
+        description="SSO login via saml",
         ip_address=ip_address,
         user_agent=user_agent,
     )

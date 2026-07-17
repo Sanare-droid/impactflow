@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.notification import Notification
 from app.services import workflows as wf
-from tests.conftest import auth_headers
+from tests.conftest import auth_headers, unlock_plan_features
 
 
 def _notify_definition() -> dict:
@@ -198,6 +198,7 @@ async def test_clone_template(client: AsyncClient, org_a: dict):
 async def test_manual_run_and_process_queue(
     client: AsyncClient, db_session: AsyncSession, org_a: dict
 ):
+    await unlock_plan_features(client, org_a)
     headers = auth_headers(org_a["access_token"], org_a["organization_id"])
     workflow_id = await _create_active_workflow(client, headers, _notify_definition())
 

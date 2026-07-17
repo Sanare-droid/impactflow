@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Form, Request
+from fastapi.responses import RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import RequestContext, client_meta, get_current_context
@@ -290,3 +291,54 @@ async def sso_callback(
         user=UserBrief.model_validate(result["user"]),
         organization_id=result["organization"].id if result.get("organization") else None,
     )
+
+
+@router.post("/sso/saml/acs", response_model=TokenResponse)
+async def sso_saml_acs(
+    request: Request,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    SAMLResponse: str = Form(...),
+    RelayState: str = Form(""),
+) -> TokenResponse:
+    """Assertion Consumer Service — accepts IdP HTTP-POST SAMLResponse."""
+    ip, ua = client_meta(request)
+    result = await auth_service.complete_saml_login(
+        db,
+        saml_response=SAMLResponse,
+        relay_state=RelayState,
+        ip_address=ip,
+        user_agent=ua,
+    )
+    return TokenResponse(
+        access_token=result["access_token"],
+        refresh_token=result["refresh_token"],
+        expires_in=result["expires_in"],
+        user=UserBrief.model_validate(result["user"]),
+        organization_id=result["organization"].id if result.get("organization") else None,
+    )
+
+
+@router.post("/sso/saml/acs/redirect")
+async def sso_saml_acs_redirect(
+    request: Request,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    SAMLResponse: str = Form(...),
+    RelayState: str = Form(""),
+) -> RedirectResponse:
+    """ACS variant that redirects to the web app with a one-time exchange code in the query."""
+    ip, ua = client_meta(request)
+    result = await auth_service.complete_saml_login(
+        db,
+        saml_response=SAMLResponse,
+        relay_state=RelayState,
+        ip_address=ip,
+        user_agent=ua,
+    )
+    # Pass tokens via URL fragment so they never hit server access logs on the next hop.
+    frontend = settings.frontend_url.rstrip("/")
+    frag = (
+        f"access_token={result['access_token']}"
+        f"&refresh_token={result['refresh_token']}"
+        f"&organization_id={result['organization'].id if result.get('organization') else ''}"
+    )
+    return RedirectResponse(url=f"{frontend}/sso/callback#{frag}", status_code=303)
