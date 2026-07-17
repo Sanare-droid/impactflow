@@ -133,7 +133,11 @@ export type OrgMembership = {
 export type InviteUserResponse = {
   user: UserBrief;
   message: string;
-  email_delivery?: { status?: string; provider?: string };
+  email_delivery?: {
+    status?: string;
+    provider?: string;
+    resend_dev_from?: boolean;
+  };
   temporary_password?: string;
 };
 

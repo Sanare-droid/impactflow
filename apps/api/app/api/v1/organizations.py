@@ -164,9 +164,18 @@ async def invite_user(
     if not ctx.organization:
         raise NotFoundError("No active organization context")
     from app.services import enterprise as ent
+    from app.services.rate_limit import enforce_rate_limit
+
+    ip, ua = client_meta(request)
+    # Bound concurrent invite storms per org + IP (DB work stays cheap; email is async).
+    await enforce_rate_limit(
+        key=f"rl:invite:org:{ctx.organization.id}",
+        limit=60,
+        window_seconds=60,
+    )
+    await enforce_rate_limit(key=f"rl:invite:ip:{ip or 'unknown'}", limit=30, window_seconds=60)
 
     await ent.enforce_seat_limit(db, ctx.organization.id)
-    ip, ua = client_meta(request)
     user, temp_password, delivery = await auth_service.invite_user(
         db,
         organization_id=ctx.organization.id,
@@ -180,18 +189,57 @@ async def invite_user(
         ip_address=ip,
         user_agent=ua,
     )
+
+    status = (delivery or {}).get("status") or "skipped"
+    if not body.send_invite:
+        message = (
+            "User invited. Copy the temporary password and share it securely."
+            if temp_password
+            else "User invited."
+        )
+    elif status == "queued":
+        if delivery.get("resend_dev_from"):
+            message = (
+                "User invited. Email is queued, but the server From address is still "
+                "Resend's test domain (onboarding@resend.dev), which usually only "
+                "delivers to the Resend account owner. Copy the temporary password below "
+                "and set SMTP_FROM to a verified domain for real invite emails."
+            )
+        else:
+            message = (
+                "User invited. An invite email is being sent in the background. "
+                "Copy the temporary password below in case delivery is delayed."
+            )
+    elif status in {"not_configured", "queued_stub"}:
+        message = (
+            "User invited. Outbound email is not configured on this server — "
+            "copy the temporary password and share it securely."
+            if temp_password
+            else "User invited. Outbound email is not configured on this server."
+        )
+    elif status == "failed":
+        message = (
+            "User invited, but email delivery failed. "
+            "Copy the temporary password and share it securely."
+            if temp_password
+            else "User invited, but email delivery failed."
+        )
+    elif status == "sent":
+        message = (
+            "User invited. Temporary password emailed — also shown once below."
+            if temp_password
+            else "User invited. Invite email sent."
+        )
+    else:
+        message = "User invited."
+
     payload: dict = {
         "user": UserBrief.model_validate(user),
-        "message": (
-            "User invited. Temporary password delivered via email."
-            if body.send_invite and temp_password
-            else "User invited."
-            if not temp_password
-            else "User invited. Deliver the temporary password securely."
-        ),
+        "message": message,
         "email_delivery": {
-            "status": delivery.get("status"),
+            "status": status,
             "provider": delivery.get("provider"),
+            "resend_dev_from": bool(delivery.get("resend_dev_from")),
         },
     }
     # Only return temp password once for newly created users (never log it)

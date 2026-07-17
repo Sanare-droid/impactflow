@@ -574,8 +574,11 @@ async def invite_user(
     ip_address: Optional[str] = None,
     user_agent: Optional[str] = None,
 ) -> tuple[User, Optional[str], dict]:
-    """Invite a user. Returns (user, temporary_password_or_none, delivery_meta)."""
-    from app.services.mailer import send_email
+    """Invite a user. Returns (user, temporary_password_or_none, delivery_meta).
+
+    Email is enqueued in the background so invite stays fast under concurrent load.
+    """
+    from app.services import mailer
 
     role_result = await db.execute(
         select(Role).where(
@@ -629,7 +632,7 @@ async def invite_user(
     )
     db.add(membership)
 
-    delivery: dict = {"email_status": "skipped", "send_invite": send_invite}
+    delivery: dict = {"status": "skipped", "send_invite": send_invite}
     if send_invite:
         from app.services import email_templates
 
@@ -646,7 +649,8 @@ async def invite_user(
                 login_url=login_url,
                 first_name=user.first_name or first_name,
             )
-        delivery = await send_email(
+        # Do not await provider — keeps invite latency low for concurrent clicks.
+        delivery = mailer.enqueue_email(
             to=user.email, subject=subject, body=body, html=html
         )
         delivery["send_invite"] = True

@@ -23,6 +23,7 @@ export default function UsersPage() {
   const [error, setError] = useState<string | null>(null);
   const [tempPassword, setTempPassword] = useState<string | null>(null);
   const [inviteMessage, setInviteMessage] = useState<string | null>(null);
+  const [emailDeliveryStatus, setEmailDeliveryStatus] = useState<string | null>(null);
 
   const { data, isLoading, error: loadError } = useQuery({
     queryKey: ["users"],
@@ -68,6 +69,7 @@ export default function UsersPage() {
       setJobTitle("");
       setRoleId(defaultRoleId);
       setInviteMessage(res.message);
+      setEmailDeliveryStatus(res.email_delivery?.status ?? null);
       setTempPassword(res.temporary_password ?? null);
       await qc.invalidateQueries({ queryKey: ["users"] });
       await qc.invalidateQueries({ queryKey: ["billing-usage"] });
@@ -76,6 +78,7 @@ export default function UsersPage() {
     onError: (err: Error) => {
       setTempPassword(null);
       setInviteMessage(null);
+      setEmailDeliveryStatus(null);
       setError(err.message);
     },
   });
@@ -133,8 +136,24 @@ export default function UsersPage() {
       )}
 
       {inviteMessage && (
-        <Card className="border-teal-200 bg-teal-50/50 dark:border-teal-900 dark:bg-teal-950/30">
-          <CardTitle>Invite sent</CardTitle>
+        <Card
+          className={
+            emailDeliveryStatus === "not_configured" ||
+            emailDeliveryStatus === "failed" ||
+            emailDeliveryStatus === "queued_stub" ||
+            inviteMessage.includes("Resend's test domain")
+              ? "border-amber-200 bg-amber-50/60 dark:border-amber-900 dark:bg-amber-950/30"
+              : "border-teal-200 bg-teal-50/50 dark:border-teal-900 dark:bg-teal-950/30"
+          }
+        >
+          <CardTitle>
+            {emailDeliveryStatus === "not_configured" || emailDeliveryStatus === "queued_stub"
+              ? "Invite created — share password manually"
+              : emailDeliveryStatus === "failed" ||
+                  inviteMessage.includes("Resend's test domain")
+                ? "Invite created — check email setup"
+                : "Invite created"}
+          </CardTitle>
           <CardDescription>{inviteMessage}</CardDescription>
           {tempPassword && (
             <div className="mt-3 rounded-lg bg-white/80 px-3 py-2 text-sm dark:bg-stone-950/60">
@@ -144,6 +163,13 @@ export default function UsersPage() {
               <code className="mt-1 block break-all text-teal-800 dark:text-teal-200">
                 {tempPassword}
               </code>
+              <button
+                type="button"
+                className="mt-2 text-xs font-medium text-teal-800 underline dark:text-teal-200"
+                onClick={() => void navigator.clipboard.writeText(tempPassword)}
+              >
+                Copy password
+              </button>
             </div>
           )}
         </Card>
