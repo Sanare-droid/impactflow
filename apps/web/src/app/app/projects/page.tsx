@@ -1,21 +1,58 @@
 "use client";
 
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
-import { useQuery } from "@tanstack/react-query";
-import { Suspense } from "react";
+import { FormEvent, useState, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
-import { Card, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Card, CardDescription, CardTitle } from "@/components/ui/card";
+import { Input, Label } from "@/components/ui/input";
 import { EmptyState } from "@/components/ui/empty-state";
 import { StatusBadge } from "@/components/ui/status-badge";
 
+const selectClassName =
+  "mt-1 w-full rounded-xl border border-stone-200 bg-white px-3 py-2 text-sm dark:border-stone-700 dark:bg-stone-950";
+
 function ProjectsContent() {
+  const router = useRouter();
   const searchParams = useSearchParams();
-  const programId = searchParams.get("program_id") ?? undefined;
+  const programIdFilter = searchParams.get("program_id") ?? undefined;
+  const qc = useQueryClient();
+
+  const [programId, setProgramId] = useState(programIdFilter ?? "");
+  const [name, setName] = useState("");
+  const [code, setCode] = useState("");
+  const [error, setError] = useState<string | null>(null);
 
   const { data, isLoading } = useQuery({
-    queryKey: ["projects", programId ?? "all"],
-    queryFn: () => api.listProjects({ program_id: programId }),
+    queryKey: ["projects", programIdFilter ?? "all"],
+    queryFn: () => api.listProjects({ program_id: programIdFilter }),
+  });
+
+  const { data: programs } = useQuery({
+    queryKey: ["programs"],
+    queryFn: () => api.listPrograms(),
+  });
+
+  const create = useMutation({
+    mutationFn: () =>
+      api.createProject({
+        program_id: programId,
+        name,
+        code: code || undefined,
+        status: "planning",
+        priority: "medium",
+      }),
+    onSuccess: async (project) => {
+      setName("");
+      setCode("");
+      setError(null);
+      await qc.invalidateQueries({ queryKey: ["projects"] });
+      await qc.invalidateQueries({ queryKey: ["dashboard-stats"] });
+      router.push(`/app/projects/${project.id}`);
+    },
+    onError: (err: Error) => setError(err.message),
   });
 
   return (
@@ -25,13 +62,66 @@ function ProjectsContent() {
           <h1 className="font-display text-3xl font-semibold tracking-tight">Projects</h1>
           <p className="mt-2 text-stone-500">
             Delivery units across programs
-            {programId ? " · filtered by program" : ""}.
+            {programIdFilter ? " · filtered by program" : ""}.
           </p>
         </div>
-        <Link href="/app/programs">
-          <span className="text-sm text-teal-700 dark:text-teal-300">Manage via programs →</span>
+        <Link href="/app/programs" className="text-sm text-teal-700 dark:text-teal-300">
+          View programs →
         </Link>
       </div>
+
+      <Card>
+        <CardTitle>Create project</CardTitle>
+        <CardDescription>Pick a program, then open the project to manage delivery work.</CardDescription>
+        <form
+          className="mt-4 grid gap-3 md:grid-cols-2"
+          onSubmit={(e: FormEvent) => {
+            e.preventDefault();
+            create.mutate();
+          }}
+        >
+          <div>
+            <Label htmlFor="program">Program</Label>
+            <select
+              id="program"
+              required
+              className={selectClassName}
+              value={programId}
+              onChange={(e) => setProgramId(e.target.value)}
+            >
+              <option value="">Select program…</option>
+              {(programs?.items ?? []).map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ))}
+            </select>
+            {(programs?.items.length ?? 0) === 0 ? (
+              <p className="mt-1 text-xs text-amber-700 dark:text-amber-300">
+                No programs yet.{" "}
+                <Link href="/app/programs" className="underline">
+                  Create a program
+                </Link>{" "}
+                first.
+              </p>
+            ) : null}
+          </div>
+          <div>
+            <Label htmlFor="code">Code (optional)</Label>
+            <Input id="code" value={code} onChange={(e) => setCode(e.target.value)} />
+          </div>
+          <div className="md:col-span-2">
+            <Label htmlFor="name">Name</Label>
+            <Input id="name" required value={name} onChange={(e) => setName(e.target.value)} />
+          </div>
+          {error && <p className="md:col-span-2 text-sm text-rose-600">{error}</p>}
+          <div className="md:col-span-2">
+            <Button type="submit" disabled={create.isPending || !programId}>
+              {create.isPending ? "Creating…" : "Create project"}
+            </Button>
+          </div>
+        </form>
+      </Card>
 
       <Card>
         <CardTitle>Project list</CardTitle>
@@ -78,7 +168,7 @@ function ProjectsContent() {
                   <td className="py-6" colSpan={4}>
                     <EmptyState
                       title="No projects yet"
-                      description="Open a program, create a project there, then open the project to assign tasks."
+                      description="Create a project above, or start from a program."
                       actionLabel="Go to programs"
                       actionHref="/app/programs"
                     />

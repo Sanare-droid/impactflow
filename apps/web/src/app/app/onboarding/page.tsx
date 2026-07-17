@@ -46,6 +46,7 @@ export default function OnboardingPage() {
   const [country, setCountry] = useState("KE");
   const [projectName, setProjectName] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [starterProjectId, setStarterProjectId] = useState<string | null>(null);
 
   const onboarding = useQuery({ queryKey: ["onboarding"], queryFn: () => api.getOnboarding() });
   const presets = useQuery({ queryKey: ["theme-presets"], queryFn: () => api.listThemePresets() });
@@ -82,8 +83,9 @@ export default function OnboardingPage() {
       });
       return project;
     },
-    onSuccess: async () => {
+    onSuccess: async (project) => {
       setProjectName("");
+      setStarterProjectId(project.id);
       setError(null);
       await qc.invalidateQueries({ queryKey: ["onboarding"] });
       await qc.invalidateQueries({ queryKey: ["projects"] });
@@ -162,6 +164,21 @@ export default function OnboardingPage() {
             >
               Invite team
             </Link>
+            {starterProjectId ? (
+              <Link
+                href={`/app/projects/${starterProjectId}`}
+                className="inline-flex h-10 items-center rounded-lg bg-stone-100 px-4 text-sm font-medium text-stone-900 hover:bg-stone-200 dark:bg-stone-800 dark:text-stone-100"
+              >
+                Open starter project
+              </Link>
+            ) : (
+              <Link
+                href="/app/projects"
+                className="inline-flex h-10 items-center rounded-lg bg-stone-100 px-4 text-sm font-medium text-stone-900 hover:bg-stone-200 dark:bg-stone-800 dark:text-stone-100"
+              >
+                Browse projects
+              </Link>
+            )}
           </div>
         </Card>
       ) : (
@@ -296,8 +313,16 @@ export default function OnboardingPage() {
               Creates a starter program and project so you can assign tasks to field officers.
             </CardDescription>
             {checklist.project ? (
-              <div className="mt-4">
+              <div className="mt-4 space-y-3">
                 <StepDone />
+                {starterProjectId ? (
+                  <Link
+                    href={`/app/projects/${starterProjectId}`}
+                    className="inline-flex h-10 items-center rounded-lg bg-teal-700 px-4 text-sm font-medium text-white hover:bg-teal-800"
+                  >
+                    Open starter project
+                  </Link>
+                ) : null}
               </div>
             ) : (
               <form

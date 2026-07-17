@@ -270,16 +270,17 @@ export default function PricingPage() {
 
         <section className="border-y border-[#E8E2D6]/90 bg-[#F7F4EC]/60">
           <div className="mx-auto max-w-6xl px-5 py-16 md:px-8">
-            <h2 className="font-display text-3xl font-semibold text-[#16324F]">Trusted by</h2>
+            <h2 className="font-display text-3xl font-semibold text-[#16324F]">Built for East Africa</h2>
             <p className="mt-3 text-[#5A534B]">
-              Placeholder — NGOs, foundations, and public-sector partners across East Africa.
+              Designed for NGOs, foundations, and public-sector partners running field programs across
+              the region.
             </p>
             <div className="mt-8 grid grid-cols-2 gap-4 md:grid-cols-4">
               {["Horizon Trust", "Lake Basin Alliance", "Civic Metrics", "Sahel Partners"].map(
                 (name) => (
                   <div
                     key={name}
-                    className="flex h-20 items-center justify-center border border-dashed border-[#D9D2C5] bg-white/70 text-sm font-medium text-[#7A7268]"
+                    className="flex h-20 items-center justify-center border border-[#D9D2C5] bg-white/70 text-sm font-medium text-[#7A7268]"
                   >
                     {name}
                   </div>

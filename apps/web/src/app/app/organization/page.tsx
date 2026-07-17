@@ -99,6 +99,7 @@ export default function OrganizationAdminPage() {
         allowed_domains: [],
       });
     },
+    onSuccess: () => setError(null),
     onError: (err: Error) => setError(err.message),
   });
 
@@ -253,9 +254,9 @@ export default function OrganizationAdminPage() {
       </Card>
 
       <Card>
-        <CardTitle>SSO foundation</CardTitle>
+        <CardTitle>SSO</CardTitle>
         <CardDescription>
-          Configure OIDC or SAML 2.0. Secrets stay encrypted; ACS for SAML is{" "}
+          Configure OIDC or SAML 2.0 for organization login. Secrets stay encrypted. SAML ACS URL is{" "}
           <span className="font-mono text-xs">/sso/saml</span>.
         </CardDescription>
         <div className="mt-4">
@@ -320,8 +321,13 @@ export default function OrganizationAdminPage() {
           }
           onClick={() => sso.mutate()}
         >
-          {ssoProvider === "saml" ? "Save SAML draft" : "Save OIDC draft"}
+          {ssoProvider === "saml" ? "Save SAML configuration" : "Save OIDC configuration"}
         </Button>
+        {sso.isSuccess ? (
+          <p className="mt-2 text-xs text-teal-700 dark:text-teal-300">
+            SSO configuration saved. Members can use Sign in with SSO on the login page.
+          </p>
+        ) : null}
       </Card>
 
       <Card>

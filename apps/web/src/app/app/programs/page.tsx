@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { FormEvent, useState } from "react";
+import { useRouter } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { Button } from "@/components/ui/button";
@@ -10,6 +11,7 @@ import { Input, Label } from "@/components/ui/input";
 import { StatusBadge } from "@/components/ui/status-badge";
 
 export default function ProgramsPage() {
+  const router = useRouter();
   const qc = useQueryClient();
   const [name, setName] = useState("");
   const [code, setCode] = useState("");
@@ -29,13 +31,14 @@ export default function ProgramsPage() {
         description: description || undefined,
         status: "active",
       }),
-    onSuccess: async () => {
+    onSuccess: async (program) => {
       setName("");
       setCode("");
       setDescription("");
       setError(null);
       await qc.invalidateQueries({ queryKey: ["programs"] });
       await qc.invalidateQueries({ queryKey: ["dashboard-stats"] });
+      router.push(`/app/programs/${program.id}`);
     },
     onError: (err: Error) => setError(err.message),
   });

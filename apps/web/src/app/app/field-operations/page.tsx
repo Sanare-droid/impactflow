@@ -104,9 +104,9 @@ export default function FieldOperationsPage() {
           {!devicesQuery.isLoading && devices.length === 0 && (
             <EmptyState
               title="No devices yet"
-              description="Devices appear here when field officers sign in on the mobile app. Assign field tasks so officers have work to sync."
-              actionLabel="Assign tasks"
-              actionHref="/app/tasks"
+              description="Devices appear here when field officers sign in on the mobile app. Invite field officers first, then they register a device on login."
+              actionLabel="Invite field officers"
+              actionHref="/app/users"
             />
           )}
           {devices.map((device) => (

@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { FormEvent, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
@@ -12,6 +13,7 @@ export default function LogframesPage() {
   const qc = useQueryClient();
   const [name, setName] = useState("");
   const [tocId, setTocId] = useState("");
+  const [programId, setProgramId] = useState("");
   const [level, setLevel] = useState("outcome");
   const [statement, setStatement] = useState("");
   const [selectedLogframe, setSelectedLogframe] = useState("");
@@ -27,16 +29,23 @@ export default function LogframesPage() {
     queryFn: () => api.listTheoriesOfChange(),
   });
 
+  const { data: programs } = useQuery({
+    queryKey: ["programs"],
+    queryFn: () => api.listPrograms(),
+  });
+
   const create = useMutation({
     mutationFn: () =>
       api.createLogframe({
         name,
         theory_of_change_id: tocId || undefined,
+        program_id: programId || undefined,
         status: "draft",
       }),
     onSuccess: async () => {
       setName("");
       setTocId("");
+      setProgramId("");
       setError(null);
       await qc.invalidateQueries({ queryKey: ["logframes"] });
       await qc.invalidateQueries({ queryKey: ["dashboard-stats"] });
@@ -92,6 +101,22 @@ export default function LogframesPage() {
                 {tocs?.items.map((t) => (
                   <option key={t.id} value={t.id}>
                     {t.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <Label htmlFor="program">Program (optional)</Label>
+              <select
+                id="program"
+                className="mt-1 w-full rounded-xl border border-stone-200 bg-white px-3 py-2 text-sm dark:border-stone-800 dark:bg-stone-950"
+                value={programId}
+                onChange={(e) => setProgramId(e.target.value)}
+              >
+                <option value="">None</option>
+                {(programs?.items ?? []).map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}
                   </option>
                 ))}
               </select>
@@ -171,6 +196,14 @@ export default function LogframesPage() {
                 <p className="font-medium">{lf.name}</p>
                 <span className="font-mono text-xs text-stone-500">{lf.code}</span>
                 <StatusBadge status={lf.status} />
+                {lf.program_id ? (
+                  <Link
+                    href={`/app/programs/${lf.program_id}`}
+                    className="text-xs text-teal-700 dark:text-teal-300"
+                  >
+                    {programs?.items.find((p) => p.id === lf.program_id)?.name ?? "Program"} →
+                  </Link>
+                ) : null}
               </div>
               <ul className="mt-3 space-y-2 text-sm">
                 {(lf.results ?? []).length === 0 && (

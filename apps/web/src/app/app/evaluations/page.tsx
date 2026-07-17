@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { FormEvent, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
@@ -13,11 +14,17 @@ export default function EvaluationsPage() {
   const [name, setName] = useState("");
   const [evaluationType, setEvaluationType] = useState("midline");
   const [objectives, setObjectives] = useState("");
+  const [programId, setProgramId] = useState("");
   const [error, setError] = useState<string | null>(null);
 
   const { data, isLoading } = useQuery({
     queryKey: ["evaluations"],
     queryFn: () => api.listEvaluations(),
+  });
+
+  const { data: programs } = useQuery({
+    queryKey: ["programs"],
+    queryFn: () => api.listPrograms(),
   });
 
   const create = useMutation({
@@ -26,11 +33,13 @@ export default function EvaluationsPage() {
         name,
         evaluation_type: evaluationType,
         objectives: objectives || undefined,
+        program_id: programId || undefined,
         status: "planned",
       }),
     onSuccess: async () => {
       setName("");
       setObjectives("");
+      setProgramId("");
       setError(null);
       await qc.invalidateQueries({ queryKey: ["evaluations"] });
       await qc.invalidateQueries({ queryKey: ["dashboard-stats"] });
@@ -85,6 +94,22 @@ export default function EvaluationsPage() {
               onChange={(e) => setObjectives(e.target.value)}
             />
           </div>
+          <div className="md:col-span-2">
+            <Label htmlFor="program">Program (optional)</Label>
+            <select
+              id="program"
+              className="mt-1 w-full rounded-xl border border-stone-200 bg-white px-3 py-2 text-sm dark:border-stone-800 dark:bg-stone-950"
+              value={programId}
+              onChange={(e) => setProgramId(e.target.value)}
+            >
+              <option value="">None</option>
+              {(programs?.items ?? []).map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ))}
+            </select>
+          </div>
           {error && <p className="md:col-span-2 text-sm text-rose-600">{error}</p>}
           <div className="md:col-span-2">
             <Button type="submit" disabled={create.isPending}>
@@ -101,7 +126,7 @@ export default function EvaluationsPage() {
             <thead className="border-b border-stone-200 text-stone-500 dark:border-stone-800">
               <tr>
                 <th className="pb-3 font-medium">Name</th>
-                <th className="pb-3 font-medium">Code</th>
+                <th className="pb-3 font-medium">Program</th>
                 <th className="pb-3 font-medium">Type</th>
                 <th className="pb-3 font-medium">Status</th>
               </tr>
@@ -120,7 +145,18 @@ export default function EvaluationsPage() {
                   className="border-b border-stone-100 last:border-0 dark:border-stone-900"
                 >
                   <td className="py-3 font-medium">{ev.name}</td>
-                  <td className="py-3 font-mono text-xs">{ev.code}</td>
+                  <td className="py-3 text-sm text-stone-500">
+                    {ev.program_id ? (
+                      <Link
+                        className="text-teal-700 dark:text-teal-300"
+                        href={`/app/programs/${ev.program_id}`}
+                      >
+                        {programs?.items.find((p) => p.id === ev.program_id)?.name ?? "Program"}
+                      </Link>
+                    ) : (
+                      "—"
+                    )}
+                  </td>
                   <td className="py-3 capitalize">{ev.evaluation_type}</td>
                   <td className="py-3">
                     <StatusBadge status={ev.status} />

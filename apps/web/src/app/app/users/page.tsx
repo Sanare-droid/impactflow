@@ -179,7 +179,8 @@ export default function UsersPage() {
         <CardTitle>Invite teammate</CardTitle>
         <CardDescription>
           Field Officers get mobile sync. Managers and MEAL officers are web-focused. Each active
-          member uses one billing seat.
+          member uses one billing seat. If invite email is not configured on the server, copy the
+          temporary password shown after invite and share it securely.
         </CardDescription>
         <form className="mt-4 grid gap-4 sm:grid-cols-2" onSubmit={onInvite}>
           <div>

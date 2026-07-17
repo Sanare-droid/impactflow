@@ -14,6 +14,7 @@ export default function IndicatorsPage() {
   const [level, setLevel] = useState("outcome");
   const [unit, setUnit] = useState("");
   const [baseline, setBaseline] = useState("");
+  const [programId, setProgramId] = useState("");
   const [periodLabel, setPeriodLabel] = useState("");
   const [targetValue, setTargetValue] = useState("");
   const [selectedIndicator, setSelectedIndicator] = useState("");
@@ -22,6 +23,11 @@ export default function IndicatorsPage() {
   const { data, isLoading } = useQuery({
     queryKey: ["indicators"],
     queryFn: () => api.listIndicators(),
+  });
+
+  const { data: programs } = useQuery({
+    queryKey: ["programs"],
+    queryFn: () => api.listPrograms(),
   });
 
   const progress = useQuery({
@@ -36,6 +42,7 @@ export default function IndicatorsPage() {
         level,
         unit: unit || undefined,
         baseline_value: baseline ? Number(baseline) : undefined,
+        program_id: programId || undefined,
         measure_type: "quantitative",
         status: "active",
       }),
@@ -43,6 +50,7 @@ export default function IndicatorsPage() {
       setName("");
       setUnit("");
       setBaseline("");
+      setProgramId("");
       setError(null);
       await qc.invalidateQueries({ queryKey: ["indicators"] });
       await qc.invalidateQueries({ queryKey: ["dashboard-stats"] });
@@ -99,6 +107,22 @@ export default function IndicatorsPage() {
                 <option value="outcome">Outcome</option>
                 <option value="output">Output</option>
                 <option value="process">Process</option>
+              </select>
+            </div>
+            <div>
+              <Label htmlFor="program">Program (optional)</Label>
+              <select
+                id="program"
+                className="mt-1 w-full rounded-xl border border-stone-200 bg-white px-3 py-2 text-sm dark:border-stone-800 dark:bg-stone-950"
+                value={programId}
+                onChange={(e) => setProgramId(e.target.value)}
+              >
+                <option value="">None</option>
+                {(programs?.items ?? []).map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}
+                  </option>
+                ))}
               </select>
             </div>
             <div className="grid grid-cols-2 gap-3">

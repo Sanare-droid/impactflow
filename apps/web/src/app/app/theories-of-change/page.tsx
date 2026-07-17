@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { FormEvent, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
@@ -8,16 +9,25 @@ import { Card, CardDescription, CardTitle } from "@/components/ui/card";
 import { Input, Label } from "@/components/ui/input";
 import { StatusBadge } from "@/components/ui/status-badge";
 
+const selectClassName =
+  "mt-1 w-full rounded-xl border border-stone-200 bg-white px-3 py-2 text-sm dark:border-stone-800 dark:bg-stone-950";
+
 export default function TheoriesOfChangePage() {
   const qc = useQueryClient();
   const [name, setName] = useState("");
   const [goal, setGoal] = useState("");
   const [problem, setProblem] = useState("");
+  const [programId, setProgramId] = useState("");
   const [error, setError] = useState<string | null>(null);
 
   const { data, isLoading } = useQuery({
     queryKey: ["theories-of-change"],
     queryFn: () => api.listTheoriesOfChange(),
+  });
+
+  const { data: programs } = useQuery({
+    queryKey: ["programs"],
+    queryFn: () => api.listPrograms(),
   });
 
   const create = useMutation({
@@ -26,18 +36,23 @@ export default function TheoriesOfChangePage() {
         name,
         goal_statement: goal || undefined,
         problem_statement: problem || undefined,
+        program_id: programId || undefined,
         status: "draft",
       }),
     onSuccess: async () => {
       setName("");
       setGoal("");
       setProblem("");
+      setProgramId("");
       setError(null);
       await qc.invalidateQueries({ queryKey: ["theories-of-change"] });
       await qc.invalidateQueries({ queryKey: ["dashboard-stats"] });
     },
     onError: (err: Error) => setError(err.message),
   });
+
+  const programName = (id?: string | null) =>
+    programs?.items.find((p) => p.id === id)?.name;
 
   return (
     <div className="animate-fade-up space-y-6">
@@ -48,7 +63,7 @@ export default function TheoriesOfChangePage() {
 
       <Card>
         <CardTitle>New theory of change</CardTitle>
-        <CardDescription>Link later to programs, projects, and logframes.</CardDescription>
+        <CardDescription>Optionally link to a program for delivery alignment.</CardDescription>
         <form
           className="mt-4 grid gap-3"
           onSubmit={(e: FormEvent) => {
@@ -59,6 +74,22 @@ export default function TheoriesOfChangePage() {
           <div>
             <Label htmlFor="name">Name</Label>
             <Input id="name" required value={name} onChange={(e) => setName(e.target.value)} />
+          </div>
+          <div>
+            <Label htmlFor="program">Program (optional)</Label>
+            <select
+              id="program"
+              className={selectClassName}
+              value={programId}
+              onChange={(e) => setProgramId(e.target.value)}
+            >
+              <option value="">None</option>
+              {(programs?.items ?? []).map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ))}
+            </select>
           </div>
           <div>
             <Label htmlFor="problem">Problem statement</Label>
@@ -78,42 +109,34 @@ export default function TheoriesOfChangePage() {
       </Card>
 
       <Card>
-        <CardTitle>Theories of change</CardTitle>
-        <div className="mt-4 overflow-x-auto">
-          <table className="w-full min-w-[720px] text-left text-sm">
-            <thead className="border-b border-stone-200 text-stone-500 dark:border-stone-800">
-              <tr>
-                <th className="pb-3 font-medium">Name</th>
-                <th className="pb-3 font-medium">Code</th>
-                <th className="pb-3 font-medium">Goal</th>
-                <th className="pb-3 font-medium">Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {isLoading && (
-                <tr>
-                  <td className="py-4 text-stone-400" colSpan={4}>
-                    Loading…
-                  </td>
-                </tr>
-              )}
-              {data?.items.map((toc) => (
-                <tr
-                  key={toc.id}
-                  className="border-b border-stone-100 last:border-0 dark:border-stone-900"
+        <CardTitle>Saved theories</CardTitle>
+        <div className="mt-4 space-y-3">
+          {isLoading && <p className="text-sm text-stone-400">Loading…</p>}
+          {(data?.items ?? []).map((item) => (
+            <div
+              key={item.id}
+              className="rounded-xl border border-stone-100 px-4 py-3 dark:border-stone-800"
+            >
+              <div className="flex flex-wrap items-center gap-2">
+                <p className="font-medium">{item.name}</p>
+                <StatusBadge status={item.status} />
+              </div>
+              {item.problem_statement ? (
+                <p className="mt-1 text-sm text-stone-500">{item.problem_statement}</p>
+              ) : null}
+              {item.program_id ? (
+                <Link
+                  href={`/app/programs/${item.program_id}`}
+                  className="mt-2 inline-block text-xs text-teal-700 dark:text-teal-300"
                 >
-                  <td className="py-3 font-medium">{toc.name}</td>
-                  <td className="py-3 font-mono text-xs">{toc.code}</td>
-                  <td className="max-w-xs truncate py-3 text-stone-500">
-                    {toc.goal_statement || "—"}
-                  </td>
-                  <td className="py-3">
-                    <StatusBadge status={toc.status} />
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                  {programName(item.program_id) ?? "Linked program"} →
+                </Link>
+              ) : null}
+            </div>
+          ))}
+          {!isLoading && (data?.items.length ?? 0) === 0 && (
+            <p className="text-sm text-stone-400">No theories of change yet.</p>
+          )}
         </div>
       </Card>
     </div>
