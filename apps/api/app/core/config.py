@@ -37,8 +37,10 @@ class Settings(BaseSettings):
     backend_cors_origins: List[str] = Field(
         default_factory=lambda: ["http://localhost:3000"]
     )
-    # Extra browser origins (Netlify deploy previews / production sites)
-    backend_cors_origin_regex: str = r"https://.*\.netlify\.app"
+    # Extra browser origins (custom domain + Netlify deploy previews)
+    backend_cors_origin_regex: str = (
+        r"https://(.*\.)?impactflow\.space|https://.*\.netlify\.app"
+    )
 
     # Optional bootstrap superadmin (created on API startup if both set)
     superadmin_email: str = ""

@@ -147,18 +147,24 @@ Browser **Network** tab: if `/` is 404 from Netlify CDN, the Next runtime is wro
 
 ## Part C — Connect both
 
-1. Set Railway `FRONTEND_URL` + `BACKEND_CORS_ORIGINS` to the **live** Netlify URL.
+1. Set Railway `FRONTEND_URL` + `BACKEND_CORS_ORIGINS` to the **live** site URL (custom domain or Netlify).
 2. Redeploy **API** (CORS is read at runtime).
 3. Confirm Netlify `NEXT_PUBLIC_API_URL` matches Railway API; redeploy **web** if you changed it.
-4. Test: open Netlify site → Register / Sign in → Dashboard.
+4. Test: open the live site → Register / Sign in → Dashboard.
 
-CORS must match exactly (scheme + host, no path). Example:
+CORS must match exactly (scheme + host, no path). Example for custom domain:
 
 ```json
-["https://impactflow.netlify.app"]
+["https://impactflow.space","https://www.impactflow.space"]
 ```
 
-If you add a custom domain later, add that origin too.
+Also set:
+
+```
+FRONTEND_URL=https://impactflow.space
+```
+
+By default the API also allows `https://impactflow.space` / `https://www.impactflow.space` and `*.netlify.app` via `BACKEND_CORS_ORIGIN_REGEX`. If you override that regex in Railway, include your custom domain there too.
 
 ---
 
@@ -171,7 +177,7 @@ If you add a custom domain later, add that origin too.
 | Alembic / API: `127.0.0.1:5432` connection refused | `DATABASE_URL` not set or still localhost | Link Postgres → API via variable reference; redeploy |
 | Alembic: `No module named 'psycopg2'` | Railway `postgresql://` URL used as sync driver | App normalizes to `postgresql+asyncpg://` — redeploy latest `main` |
 | Netlify: `(index):1 404` | Static deploy / wrong base / no Next plugin | Use `netlify.toml`; redeploy |
-| API CORS errors in browser | `BACKEND_CORS_ORIGINS` missing Netlify origin | Update + restart API (or rely on `*.netlify.app` regex) |
+| API CORS errors in browser | `BACKEND_CORS_ORIGINS` missing live origin | Add `https://impactflow.space` (and www) + restart API; or redeploy latest `main` (regex allows `impactflow.space`) |
 | `Failed to fetch` / cannot reach API | Web still on localhost API or wrong URL | Set `NEXT_PUBLIC_API_URL` to Railway HTTPS URL and **redeploy Netlify** |
 | `/ready` database false | Bad `DATABASE_URL` or Redis | Fix URL scheme / Redis link; check migration logs |
 | Login `401 Unauthorized` | Wrong password, or `SUPERADMIN_*` never seeded (password too short / vars missing) | Set `SUPERADMIN_EMAIL` + `SUPERADMIN_PASSWORD` (8+), redeploy API; leave org slug blank; check Railway logs for `superadmin.bootstrap_ok` |
