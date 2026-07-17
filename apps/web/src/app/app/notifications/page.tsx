@@ -59,6 +59,8 @@ export default function NotificationsPage() {
             <EmptyState
               title="No notifications yet"
               description="Alerts for predictions, reports, invites, and overdue work will show up here."
+              actionLabel="Invite teammates"
+              actionHref="/app/users"
             />
           )}
           {data?.items.map((n) => (

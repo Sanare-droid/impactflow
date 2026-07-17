@@ -1,5 +1,7 @@
 "use client";
 
+import { FeatureGate } from "@/components/feature-gate";
+
 import { FormEvent, useState } from "react";
 import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -12,6 +14,14 @@ import { StatusBadge } from "@/components/ui/status-badge";
 import { EmptyState } from "@/components/ui/empty-state";
 
 export default function SurveysPage() {
+  return (
+    <FeatureGate feature="surveys" fallbackTitle="Surveys are not on your plan">
+      <SurveysInner />
+    </FeatureGate>
+  );
+}
+
+function SurveysInner() {
   const qc = useQueryClient();
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
@@ -140,6 +150,8 @@ export default function SurveysPage() {
             <EmptyState
               title="No surveys yet"
               description="Create a draft survey to start collecting field responses."
+              actionLabel="Create survey"
+              actionHref="/app/surveys"
             />
           )}
           {data?.items.map((s) => (

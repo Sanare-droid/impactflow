@@ -6,16 +6,18 @@ from datetime import datetime
 from typing import Annotated, Any, Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query, Request
+from fastapi import APIRouter, Depends, File, Form, Query, Request, UploadFile
+from fastapi.responses import FileResponse
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import RequestContext, client_meta, get_current_context, require_permissions
-from app.core.exceptions import ForbiddenError, NotFoundError
+from app.core.exceptions import AppError, ForbiddenError, NotFoundError
 from app.db.session import get_db
 from app.schemas import MessageResponse, ORMModel, PaginatedResponse, PaginationMeta
 from app.services import devices as device_service
 from app.services import field_sync as sync_service
+from app.services import object_storage
 
 router = APIRouter(tags=["Field Operations"])
 
@@ -433,6 +435,74 @@ async def register_media_upload(
         metadata=body.metadata,
     )
     return MediaUploadResponse.model_validate(row)
+
+
+@router.post("/media/uploads/binary", response_model=MediaUploadResponse, status_code=201)
+async def upload_media_binary(
+    ctx: Annotated[RequestContext, Depends(require_permissions(*SYNC_PERMS))],
+    db: Annotated[AsyncSession, Depends(get_db)],
+    file: UploadFile = File(...),
+    client_mutation_id: str = Form(...),
+    entity_type: str = Form(default="survey_response"),
+    entity_id: Optional[UUID] = Form(default=None),
+    device_id: Optional[UUID] = Form(default=None),
+) -> MediaUploadResponse:
+    """Upload file bytes to object storage and mark the media record as uploaded."""
+    org_id = _require_org(ctx)
+    content = await file.read()
+    if len(content) > 25 * 1024 * 1024:
+        raise AppError("File too large (max 25MB)", code="VALIDATION_ERROR")
+    file_name = file.filename or "upload.bin"
+    mime_type = file.content_type
+    row = await device_service.register_media_upload(
+        db,
+        organization_id=org_id,
+        device_id=device_id,
+        client_mutation_id=client_mutation_id,
+        entity_type=entity_type,
+        entity_id=entity_id,
+        file_name=file_name,
+        mime_type=mime_type,
+        file_size=len(content),
+    )
+    try:
+        remote_url = object_storage.store_bytes(
+            organization_id=org_id,
+            file_name=file_name,
+            content=content,
+            content_type=mime_type,
+        )
+        row = await device_service.complete_media_upload(
+            db,
+            organization_id=org_id,
+            upload_id=row.id,
+            remote_url=remote_url,
+            file_size=len(content),
+            mime_type=mime_type,
+        )
+    except Exception as exc:  # noqa: BLE001
+        row = await device_service.complete_media_upload(
+            db,
+            organization_id=org_id,
+            upload_id=row.id,
+            remote_url="",
+            error_message=str(exc)[:500],
+        )
+        raise
+    return MediaUploadResponse.model_validate(row)
+
+
+@router.get("/media/files/{file_path:path}")
+async def serve_local_media_file(file_path: str) -> FileResponse:
+    """Serve locally stored media when S3/MinIO is unavailable."""
+    from pathlib import Path
+
+    from app.services.object_storage import _LOCAL_ROOT
+
+    target = (_LOCAL_ROOT / file_path).resolve()
+    if not str(target).startswith(str(_LOCAL_ROOT.resolve())) or not target.is_file():
+        raise NotFoundError("File not found")
+    return FileResponse(target)
 
 
 @router.get("/media/uploads", response_model=PaginatedResponse[MediaUploadResponse])

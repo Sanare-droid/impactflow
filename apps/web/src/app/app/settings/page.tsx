@@ -14,6 +14,7 @@ function SettingsContent() {
   const [mfaSecret, setMfaSecret] = useState<string | null>(null);
   const [mfaUri, setMfaUri] = useState<string | null>(null);
   const [code, setCode] = useState("");
+  const [disableCode, setDisableCode] = useState("");
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -31,17 +32,7 @@ function SettingsContent() {
     setError(null);
     setMessage(null);
     try {
-      const res = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000"}/api/v1/auth/mfa/setup`,
-        {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${localStorage.getItem("if_access_token")}`,
-          },
-        },
-      );
-      if (!res.ok) throw new Error("Unable to start MFA setup");
-      const data = await res.json();
+      const data = await api.mfaSetup();
       setMfaSecret(data.secret);
       setMfaUri(data.provisioning_uri);
     } catch (err) {
@@ -52,21 +43,7 @@ function SettingsContent() {
   async function enableMfa() {
     setError(null);
     try {
-      const res = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000"}/api/v1/auth/mfa/enable`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${localStorage.getItem("if_access_token")}`,
-          },
-          body: JSON.stringify({ code }),
-        },
-      );
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
-        throw new Error(body.message || body.detail?.message || "Unable to enable MFA");
-      }
+      await api.mfaEnable(code);
       setMessage("MFA enabled successfully");
       setMfaSecret(null);
       setMfaUri(null);
@@ -74,6 +51,19 @@ function SettingsContent() {
       await refreshMe();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Enable failed");
+    }
+  }
+
+  async function disableMfa() {
+    setError(null);
+    setMessage(null);
+    try {
+      await api.mfaDisable(disableCode);
+      setMessage("MFA disabled");
+      setDisableCode("");
+      await refreshMe();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Disable failed");
     }
   }
 
@@ -194,6 +184,20 @@ function SettingsContent() {
                 </div>
               </div>
             )}
+          </div>
+        )}
+        {user?.mfa_enabled && (
+          <div className="mt-4 max-w-xs space-y-3">
+            <Label htmlFor="disable-code">Enter a current MFA code to disable</Label>
+            <Input
+              id="disable-code"
+              value={disableCode}
+              onChange={(e) => setDisableCode(e.target.value)}
+              placeholder="123456"
+            />
+            <Button variant="secondary" onClick={disableMfa}>
+              Disable MFA
+            </Button>
           </div>
         )}
       </Card>

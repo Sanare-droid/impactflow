@@ -1,5 +1,7 @@
 "use client";
 
+import { FeatureGate } from "@/components/feature-gate";
+
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -24,6 +26,14 @@ import { CitationChips } from "@/components/ai/CitationChips";
 import { cn } from "@/lib/utils";
 
 export default function CopilotPage() {
+  return (
+    <FeatureGate feature="ai" fallbackTitle="AI Copilot requires Starter+">
+      <CopilotInner />
+    </FeatureGate>
+  );
+}
+
+function CopilotInner() {
   const qc = useQueryClient();
   const pathname = usePathname();
   const [activeId, setActiveId] = useState<string | null>(null);

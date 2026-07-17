@@ -243,3 +243,36 @@ async def register_media_upload(
     db.add(row)
     await db.flush()
     return row
+
+
+async def complete_media_upload(
+    db: AsyncSession,
+    *,
+    organization_id: UUID,
+    upload_id: UUID,
+    remote_url: str,
+    file_size: Optional[int] = None,
+    mime_type: Optional[str] = None,
+    error_message: Optional[str] = None,
+) -> MediaUploadRecord:
+    row = await db.scalar(
+        select(MediaUploadRecord).where(
+            MediaUploadRecord.organization_id == organization_id,
+            MediaUploadRecord.id == upload_id,
+        )
+    )
+    if not row:
+        raise NotFoundError("Media upload not found")
+    if error_message:
+        row.status = "failed"
+        row.error_message = error_message
+    else:
+        row.status = "uploaded"
+        row.remote_url = remote_url
+        row.error_message = None
+        if file_size is not None:
+            row.file_size = file_size
+        if mime_type:
+            row.mime_type = mime_type
+    await db.flush()
+    return row

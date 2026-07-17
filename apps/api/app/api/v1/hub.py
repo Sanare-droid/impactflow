@@ -315,9 +315,62 @@ async def oauth_start(
     )
     meta = dict(integ.metadata_ or {})
     meta["oauth_state"] = state
+    meta["oauth_redirect_uri"] = body.redirect_uri
     integ.metadata_ = meta
     await db.flush()
     return {"authorize_url": url, "state": state}
+
+
+class OAuthCallbackRequest(BaseModel):
+    code: str
+    state: str
+    redirect_uri: Optional[str] = None
+
+
+@router.post("/oauth/callback")
+async def oauth_callback(
+    body: OAuthCallbackRequest,
+    ctx: Annotated[RequestContext, Depends(require_permissions(*MANAGE))],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> dict[str, Any]:
+    """Complete connector OAuth: exchange code, store tokens on the connection."""
+    org_id = _require_org(ctx)
+    parts = (body.state or "").split(":")
+    if len(parts) < 2:
+        raise AppError("Invalid OAuth state", code="VALIDATION_ERROR")
+    try:
+        state_org = UUID(parts[0])
+        integration_id = UUID(parts[1])
+    except ValueError as exc:
+        raise AppError("Invalid OAuth state", code="VALIDATION_ERROR") from exc
+    if state_org != org_id:
+        raise ForbiddenError("OAuth state organization mismatch")
+
+    integ = await get_integration(db, org_id, integration_id)
+    meta = dict(integ.metadata_ or {})
+    if meta.get("oauth_state") and meta.get("oauth_state") != body.state:
+        raise AppError("OAuth state mismatch", code="oauth_state_mismatch")
+    redirect_uri = body.redirect_uri or meta.get("oauth_redirect_uri")
+    if not redirect_uri:
+        raise AppError("redirect_uri required", code="VALIDATION_ERROR")
+
+    tokens = await connector_runtime.exchange_oauth_code(
+        integ.provider,
+        config=integ.config or {},
+        code=body.code,
+        redirect_uri=redirect_uri,
+    )
+    integ.config = connector_runtime.merge_oauth_tokens_into_config(integ.config or {}, tokens)
+    integ.status = "connected"
+    meta.pop("oauth_state", None)
+    integ.metadata_ = meta
+    await db.flush()
+    return {
+        "id": str(integ.id),
+        "status": integ.status,
+        "message": "OAuth connected",
+        "token_keys": [k for k in ("access_token", "refresh_token") if k in tokens],
+    }
 
 
 # -------- Field mapping --------

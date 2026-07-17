@@ -89,7 +89,13 @@ export type LocalSurveyResponse = {
 
 export type MutationRow = {
   id: string;
-  entity_type: "community" | "household" | "beneficiary" | "survey_response";
+  entity_type:
+    | "community"
+    | "household"
+    | "beneficiary"
+    | "survey_response"
+    | "task"
+    | "notification";
   local_id: string;
   op: "create" | "update" | "delete";
   payload_json: string;

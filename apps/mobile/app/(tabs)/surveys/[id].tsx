@@ -1,8 +1,13 @@
 import { useCallback, useMemo, useState } from "react";
 import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useFocusEffect, useLocalSearchParams } from "expo-router";
-import type { SurveyField } from "@/lib/api";
-import { createLocalSurveyResponse, getLocalSurvey, listLocalSurveyResponses } from "@/lib/db/repo";
+import { api, type SurveyField } from "@/lib/api";
+import {
+  createLocalSurveyResponse,
+  enqueueMediaUpload,
+  getLocalSurvey,
+  listLocalSurveyResponses,
+} from "@/lib/db/repo";
 import type { LocalSurvey, LocalSurveyResponse } from "@/lib/db/types";
 import { flattenSurveyFields, normalizeFieldType, validateAnswers } from "@/lib/surveys";
 import { useSync } from "@/lib/sync/SyncContext";
@@ -72,6 +77,16 @@ export default function SurveyCaptureScreen() {
       if (Object.keys(validation).length > 0) {
         setErrors(validation);
         setBanner("Fix the highlighted fields before submitting.");
+        return;
+      }
+      const pendingField = fields.find((f) => {
+        const v = answers[f.id];
+        return typeof v === "object" && v !== null && (v as Record<string, unknown>).pending_upload === true;
+      });
+      if (pendingField) {
+        setBanner(
+          `"${pendingField.label}" is still waiting to upload. Connect to the internet and tap "Retry upload" before submitting.`,
+        );
         return;
       }
     }
@@ -230,6 +245,34 @@ function FieldInput({
     );
   }
 
+  if (type === "image" || type === "photo") {
+    return (
+      <MediaField
+        label={label}
+        value={value}
+        error={error}
+        onChange={onChange}
+        mediaTypes="images"
+      />
+    );
+  }
+
+  if (type === "gps" || type === "location") {
+    return <GpsField label={label} value={value} error={error} onChange={onChange} />;
+  }
+
+  if (type === "file" || type === "video" || type === "audio" || type === "signature") {
+    return (
+      <View style={{ gap: 8 }}>
+        <Text style={{ fontFamily: "Manrope_600SemiBold", fontSize: 14 }}>{label}</Text>
+        <Text style={{ color: "#78716C", fontSize: 13 }}>
+          {type} capture is not supported on mobile yet. Complete this field on the web app.
+        </Text>
+        {error && <Text style={{ color: "#E11D48", fontSize: 12 }}>{error}</Text>}
+      </View>
+    );
+  }
+
   const keyboardType =
     type === "number"
       ? "numeric"
@@ -251,6 +294,180 @@ function FieldInput({
       autoCapitalize={type === "email" ? "none" : "sentences"}
       error={error}
     />
+  );
+}
+
+function MediaField({
+  label,
+  value,
+  error,
+  onChange,
+  mediaTypes,
+}: {
+  label: string;
+  value: unknown;
+  error?: string;
+  onChange: (value: unknown) => void;
+  mediaTypes: "images" | "videos" | "all";
+}) {
+  const [busy, setBusy] = useState(false);
+  const val = (typeof value === "object" && value ? (value as Record<string, unknown>) : {}) as {
+    uri?: string;
+    local_uri?: string;
+    mime_type?: string;
+    file_name?: string;
+    pending_upload?: boolean;
+  };
+  const uri = typeof val.uri === "string" ? val.uri : "";
+  const pending = val.pending_upload === true;
+
+  // Uploads bytes to object storage immediately; queues locally for retry when offline.
+  async function uploadCaptured(fileUri: string, mimeType: string | undefined, fileName: string) {
+    try {
+      const uploaded = await api.uploadMediaBinary({
+        fileUri,
+        fileName,
+        mimeType,
+        entityType: "survey_response",
+      });
+      onChange({
+        uri: uploaded.remote_url ?? "",
+        mime_type: uploaded.mime_type ?? mimeType,
+        file_name: uploaded.file_name ?? fileName,
+      });
+    } catch {
+      try {
+        await enqueueMediaUpload({
+          entity_type: "survey_field",
+          file_uri: fileUri,
+          file_name: fileName,
+          mime_type: mimeType,
+        });
+      } catch {
+        /* best-effort local queue — capture is still preserved via local_uri below */
+      }
+      onChange({
+        uri: "",
+        local_uri: fileUri,
+        mime_type: mimeType,
+        file_name: fileName,
+        pending_upload: true,
+      });
+    }
+  }
+
+  async function pick() {
+    setBusy(true);
+    try {
+      const ImagePicker = await import("expo-image-picker");
+      const perm = await ImagePicker.requestCameraPermissionsAsync();
+      if (!perm.granted) {
+        onChange({ error: "Camera permission is required" });
+        return;
+      }
+      const result = await ImagePicker.launchCameraAsync({
+        mediaTypes:
+          mediaTypes === "images"
+            ? ImagePicker.MediaTypeOptions.Images
+            : mediaTypes === "videos"
+              ? ImagePicker.MediaTypeOptions.Videos
+              : ImagePicker.MediaTypeOptions.All,
+        quality: 0.7,
+      });
+      if (!result.canceled && result.assets[0]) {
+        const asset = result.assets[0];
+        await uploadCaptured(asset.uri, asset.mimeType, asset.fileName ?? "capture.jpg");
+      }
+    } catch (err) {
+      onChange({ error: err instanceof Error ? err.message : "Capture failed" });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function retryUpload() {
+    if (!val.local_uri) return;
+    setBusy(true);
+    try {
+      await uploadCaptured(val.local_uri, val.mime_type, val.file_name ?? "capture.jpg");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <View style={{ gap: 8 }}>
+      <Text style={{ fontFamily: "Manrope_600SemiBold", fontSize: 14 }}>{label}</Text>
+      {uri ? <Text style={{ fontSize: 12, color: "#57534E" }} numberOfLines={2}>{uri}</Text> : null}
+      {pending && (
+        <Text style={{ fontSize: 12, color: "#B45309" }}>
+          Captured — waiting to upload. Retry once you have a connection.
+        </Text>
+      )}
+      <View style={{ flexDirection: "row", gap: 8 }}>
+        <Button
+          title={busy ? "Working…" : uri || pending ? "Retake photo" : "Take photo"}
+          onPress={() => void pick()}
+          disabled={busy}
+        />
+        {pending && (
+          <Button title="Retry upload" variant="secondary" onPress={() => void retryUpload()} disabled={busy} />
+        )}
+      </View>
+      {error && <Text style={{ color: "#E11D48", fontSize: 12 }}>{error}</Text>}
+    </View>
+  );
+}
+
+function GpsField({
+  label,
+  value,
+  error,
+  onChange,
+}: {
+  label: string;
+  value: unknown;
+  error?: string;
+  onChange: (value: unknown) => void;
+}) {
+  const [busy, setBusy] = useState(false);
+  const coords =
+    typeof value === "object" && value
+      ? (value as { lat?: number; lng?: number })
+      : {};
+
+  async function capture() {
+    setBusy(true);
+    try {
+      const Location = await import("expo-location");
+      const perm = await Location.requestForegroundPermissionsAsync();
+      if (!perm.granted) {
+        onChange({ error: "Location permission is required" });
+        return;
+      }
+      const pos = await Location.getCurrentPositionAsync({});
+      onChange({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+    } catch (err) {
+      onChange({ error: err instanceof Error ? err.message : "Location failed" });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <View style={{ gap: 8 }}>
+      <Text style={{ fontFamily: "Manrope_600SemiBold", fontSize: 14 }}>{label}</Text>
+      {coords.lat != null && coords.lng != null ? (
+        <Text style={{ fontSize: 12, color: "#57534E" }}>
+          {coords.lat.toFixed(5)}, {coords.lng.toFixed(5)}
+        </Text>
+      ) : null}
+      <Button
+        title={busy ? "Locating…" : "Use current location"}
+        onPress={() => void capture()}
+      />
+      {error && <Text style={{ color: "#E11D48", fontSize: 12 }}>{error}</Text>}
+    </View>
   );
 }
 

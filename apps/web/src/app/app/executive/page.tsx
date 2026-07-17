@@ -1,5 +1,7 @@
 "use client";
 
+import { FeatureGate } from "@/components/feature-gate";
+
 import { useState } from "react";
 import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -135,6 +137,14 @@ const DETAIL_TABS = [
 ];
 
 export default function ExecutivePage() {
+  return (
+    <FeatureGate feature="executive" fallbackTitle="Executive analytics require Professional+">
+      <ExecutiveInner />
+    </FeatureGate>
+  );
+}
+
+function ExecutiveInner() {
   const qc = useQueryClient();
   const [tab, setTab] = useState("portfolio");
   const [briefAudience, setBriefAudience] = useState("board");

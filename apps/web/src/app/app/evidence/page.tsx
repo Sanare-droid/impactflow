@@ -125,6 +125,8 @@ export default function EvidencePage() {
                     <EmptyState
                       title="No evidence yet"
                       description="Register documents, photos, or case materials for verification."
+                      actionLabel="Add evidence"
+                      actionHref="/app/evidence"
                     />
                   </td>
                 </tr>

@@ -6,6 +6,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Suspense } from "react";
 import { api } from "@/lib/api";
 import { Card, CardTitle } from "@/components/ui/card";
+import { EmptyState } from "@/components/ui/empty-state";
 import { StatusBadge } from "@/components/ui/status-badge";
 
 function ProjectsContent() {
@@ -74,8 +75,13 @@ function ProjectsContent() {
               ))}
               {!isLoading && data?.items.length === 0 && (
                 <tr>
-                  <td className="py-6 text-stone-400" colSpan={4}>
-                    No projects yet. Create one from a program page.
+                  <td className="py-6" colSpan={4}>
+                    <EmptyState
+                      title="No projects yet"
+                      description="Create a program first, then add a project from the program page."
+                      actionLabel="Go to programs"
+                      actionHref="/app/programs"
+                    />
                   </td>
                 </tr>
               )}

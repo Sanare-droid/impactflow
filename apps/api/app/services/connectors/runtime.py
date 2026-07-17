@@ -111,6 +111,55 @@ def build_oauth_authorize_url(
     return f"{authorize}{sep}{urlencode(params)}"
 
 
+async def exchange_oauth_code(
+    connector_code: str,
+    *,
+    config: dict[str, Any],
+    code: str,
+    redirect_uri: str,
+) -> dict[str, Any]:
+    """Exchange authorization code for tokens and return token payload."""
+    connector = get_connector(connector_code)
+    if not connector or connector.get("auth_type") != "oauth2":
+        raise AppError("Connector does not support OAuth 2.0", code="oauth_unsupported")
+    oauth = connector.get("oauth") or {}
+    token_url = oauth.get("token_url") or ""
+    revealed = reveal_config_secrets(config)
+    try:
+        token_url = token_url.format(**{**revealed, "tenant_id": revealed.get("tenant_id") or "common"})
+    except KeyError:
+        pass
+    client_id = revealed.get("client_id") or revealed.get("app_key")
+    client_secret = revealed.get("client_secret") or revealed.get("app_secret")
+    if not client_id or not token_url:
+        raise AppError("client_id and token_url are required", code="VALIDATION_ERROR")
+    data = {
+        "grant_type": "authorization_code",
+        "code": code,
+        "redirect_uri": redirect_uri,
+        "client_id": client_id,
+    }
+    if client_secret:
+        data["client_secret"] = client_secret
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        resp = await client.post(token_url, data=data)
+        if resp.status_code >= 400:
+            raise AppError(
+                f"OAuth token exchange failed: {resp.text[:300]}",
+                code="oauth_exchange_failed",
+            )
+        return resp.json()
+
+
+def merge_oauth_tokens_into_config(config: dict[str, Any], tokens: dict[str, Any]) -> dict[str, Any]:
+    """Persist OAuth tokens into encrypted config."""
+    merged = dict(config or {})
+    for key in ("access_token", "refresh_token", "id_token", "expires_in", "token_type", "scope"):
+        if key in tokens and tokens[key] is not None:
+            merged[key] = tokens[key]
+    return store_encrypted_config(merged)
+
+
 def enc_has(integration: IntegrationConnection, key: str) -> bool:
     return key in ((integration.config or {}).get("_encrypted") or {})
 

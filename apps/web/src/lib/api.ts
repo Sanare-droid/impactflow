@@ -13,6 +13,11 @@ export type UserBrief = {
   mfa_enabled: boolean;
   must_change_password?: boolean;
   primary_organization_id?: string | null;
+  is_superuser?: boolean;
+  is_platform_admin?: boolean;
+  email_verified?: boolean;
+  locale?: string;
+  timezone?: string;
 };
 
 export type Organization = {
@@ -2066,6 +2071,43 @@ class ApiClient {
     });
   }
 
+  mfaSetup() {
+    return this.request<{ secret: string; provisioning_uri: string }>("/auth/mfa/setup", {
+      method: "POST",
+    });
+  }
+
+  mfaEnable(code: string) {
+    return this.request<{ message: string }>("/auth/mfa/enable", {
+      method: "POST",
+      body: JSON.stringify({ code }),
+    });
+  }
+
+  mfaDisable(code: string) {
+    return this.request<{ message: string }>("/auth/mfa/disable", {
+      method: "POST",
+      body: JSON.stringify({ code }),
+    });
+  }
+
+  listAuditLogs(params: { page?: number; page_size?: number } = {}) {
+    const q = new URLSearchParams();
+    q.set("page", String(params.page ?? 1));
+    q.set("page_size", String(params.page_size ?? 50));
+    return this.request<
+      Paginated<{
+        id: string;
+        action: string;
+        resource_type: string;
+        actor_email?: string | null;
+        description?: string | null;
+        created_at: string;
+        status: string;
+      }>
+    >(`/audit-logs?${q}`);
+  }
+
   forgotPassword(email: string) {
     return this.request<{ message: string }>("/auth/forgot-password", {
       method: "POST",
@@ -2511,6 +2553,64 @@ class ApiClient {
     });
   }
 
+  updateSavedDashboard(id: string, body: Record<string, unknown>) {
+    return this.request<SavedDashboard>(`/saved-dashboards/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    });
+  }
+
+  createRole(body: {
+    name: string;
+    slug?: string;
+    description?: string;
+    permissions?: string[];
+    is_default?: boolean;
+  }) {
+    return this.request<Role>("/roles", {
+      method: "POST",
+      body: JSON.stringify(body),
+    });
+  }
+
+  updateRole(
+    id: string,
+    body: {
+      name?: string;
+      description?: string;
+      permissions?: string[];
+      is_default?: boolean;
+    },
+  ) {
+    return this.request<Role>(`/roles/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    });
+  }
+
+  listPermissions() {
+    return this.request<Array<{ id: string; code: string; module: string; action: string }>>(
+      "/permissions",
+    );
+  }
+
+  startSsoLogin(organizationSlug: string, redirectUri: string) {
+    const q = new URLSearchParams({
+      organization_slug: organizationSlug,
+      redirect_uri: redirectUri,
+    });
+    return this.request<{ authorize_url: string; state: string }>(`/auth/sso/start?${q}`, {
+      method: "GET",
+    });
+  }
+
+  ssoCallback(params: { code: string; state: string; redirect_uri: string }) {
+    const q = new URLSearchParams(params);
+    return this.request<TokenResponse>(`/auth/sso/callback?${q}`, {
+      method: "POST",
+    });
+  }
+
   listMapLayers() {
     return this.request<Paginated<MapLayer>>("/map-layers?page_size=100");
   }
@@ -2930,6 +3030,13 @@ class ApiClient {
   ) {
     return this.request<{ authorize_url: string; state: string }>(
       `/integrations/${id}/oauth/start`,
+      { method: "POST", body: JSON.stringify(body) },
+    );
+  }
+
+  oauthCallback(body: { code: string; state: string; redirect_uri?: string }) {
+    return this.request<{ id: string; status: string; message: string }>(
+      "/oauth/callback",
       { method: "POST", body: JSON.stringify(body) },
     );
   }
@@ -3643,6 +3750,59 @@ class ApiClient {
     if (params.page) q.set("page", String(params.page));
     if (params.status) q.set("status", params.status);
     return this.request<Paginated<MediaUploadRecord>>(`/media/uploads?${q}`);
+  }
+
+  async uploadMediaBinary(input: {
+    file: File | Blob;
+    fileName?: string;
+    clientMutationId?: string;
+    entityType?: string;
+    entityId?: string;
+  }): Promise<MediaUploadRecord> {
+    this.hydrateFromStorage();
+    const form = new FormData();
+    const name = input.fileName ?? (input.file instanceof File ? input.file.name : "upload.bin");
+    form.append("file", input.file, name);
+    form.append(
+      "client_mutation_id",
+      input.clientMutationId ??
+        (typeof crypto !== "undefined" && "randomUUID" in crypto
+          ? crypto.randomUUID()
+          : `web-${Date.now()}`),
+    );
+    form.append("entity_type", input.entityType ?? "survey_response");
+    if (input.entityId) form.append("entity_id", input.entityId);
+
+    const headers = new Headers();
+    if (this.accessToken) headers.set("Authorization", `Bearer ${this.accessToken}`);
+    if (this.organizationId) headers.set("X-Organization-Id", this.organizationId);
+
+    let res = await fetch(`${API_V1}/media/uploads/binary`, {
+      method: "POST",
+      headers,
+      body: form,
+    });
+    if (res.status === 401 && this.refreshToken) {
+      const ok = await this.refresh();
+      if (ok) {
+        const retryHeaders = new Headers();
+        if (this.accessToken) retryHeaders.set("Authorization", `Bearer ${this.accessToken}`);
+        if (this.organizationId) retryHeaders.set("X-Organization-Id", this.organizationId);
+        res = await fetch(`${API_V1}/media/uploads/binary`, {
+          method: "POST",
+          headers: retryHeaders,
+          body: form,
+        });
+      }
+    }
+    if (!res.ok) {
+      const body = (await res.json().catch(() => ({}))) as {
+        message?: string;
+        detail?: { message?: string };
+      };
+      throw new Error(body.message || body.detail?.message || "Upload failed");
+    }
+    return res.json();
   }
 
   // ------------------------------------------------------------------------- //

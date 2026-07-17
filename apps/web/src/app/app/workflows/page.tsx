@@ -1,5 +1,7 @@
 "use client";
 
+import { FeatureGate } from "@/components/feature-gate";
+
 import { FormEvent, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -13,6 +15,14 @@ import { StatusBadge } from "@/components/ui/status-badge";
 import { EmptyState } from "@/components/ui/empty-state";
 
 export default function WorkflowsPage() {
+  return (
+    <FeatureGate feature="workflows" fallbackTitle="Workflows require Starter+">
+      <WorkflowsInner />
+    </FeatureGate>
+  );
+}
+
+function WorkflowsInner() {
   const qc = useQueryClient();
   const router = useRouter();
   const [name, setName] = useState("");

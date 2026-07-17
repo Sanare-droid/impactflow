@@ -22,6 +22,30 @@ export type SyncResult = {
 
 let syncing = false;
 
+/** Best-effort retry of media captured while offline (e.g. app was closed before the field
+ * worker could tap "Retry upload"). Does not block the main sync — failures stay queued. */
+async function flushPendingMedia(): Promise<void> {
+  const pending = await repo.listPendingMedia();
+  for (const item of pending) {
+    try {
+      const uploaded = await api.uploadMediaBinary({
+        fileUri: item.file_uri,
+        fileName: item.file_name,
+        mimeType: item.mime_type ?? undefined,
+        clientMutationId: item.client_mutation_id,
+        entityType: item.entity_type,
+        entityId: item.entity_server_id ?? undefined,
+      });
+      await repo.markMediaSynced(item.local_id, uploaded.id);
+    } catch (err) {
+      await repo.markMediaFailed(
+        item.local_id,
+        err instanceof Error ? err.message : "Upload failed",
+      );
+    }
+  }
+}
+
 async function ensureDeviceRegistered(): Promise<string> {
   const existing = await getDeviceId();
   if (existing) return existing;
@@ -85,6 +109,12 @@ async function applyPushResults(
           survey_id: (result.record?.survey_id as string) ?? undefined,
           updated_at: (result.record?.updated_at as string) ?? undefined,
         });
+      } else if (mut.entity_type === "task") {
+        await repo.markTaskSynced(mut.local_id, {
+          status: (result.record?.status as string) ?? undefined,
+          completed_at: (result.record?.completed_at as string | null) ?? undefined,
+          updated_at: (result.record?.updated_at as string) ?? undefined,
+        });
       }
       pushed += 1;
     } else {
@@ -94,6 +124,8 @@ async function applyPushResults(
         await repo.markBeneficiaryFailed(mut.local_id, message);
       } else if (mut.entity_type === "survey_response") {
         await repo.markSurveyResponseFailed(mut.local_id, message);
+      } else if (mut.entity_type === "task") {
+        await repo.markTaskFailed(mut.local_id, message);
       }
       failed += 1;
     }
@@ -153,6 +185,19 @@ async function applyPullResults(pull: Record<string, unknown>): Promise<number> 
     pulled += 1;
   }
 
+  // Full assignee reconcile — incremental pull alone cannot remove reassigned tasks
+  if (api.userId) {
+    try {
+      const remote = await api.listTasks({ page: 1, assignee_id: api.userId });
+      await repo.purgeTasksNotIn(remote.items.map((t) => t.id));
+      for (const t of remote.items) {
+        await repo.upsertServerTask(t);
+      }
+    } catch {
+      /* offline / permission — skip purge */
+    }
+  }
+
   for (const n of (pull.notifications as Array<Record<string, unknown>>) ?? []) {
     await repo.upsertServerNotification(n as Parameters<typeof repo.upsertServerNotification>[0]);
     pulled += 1;
@@ -180,6 +225,7 @@ export async function runSync(): Promise<SyncResult> {
     }
 
     const deviceId = await ensureDeviceRegistered();
+    await flushPendingMedia();
     const last = await getMeta("last_sync_at");
     const pendingMutations = await repo.listPendingMutations();
     const pendingMedia = await repo.listPendingMedia();

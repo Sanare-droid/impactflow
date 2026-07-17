@@ -1,5 +1,7 @@
 "use client";
 
+import { FeatureGate } from "@/components/feature-gate";
+
 import { FormEvent, useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
@@ -8,6 +10,14 @@ import { Card, CardDescription, CardTitle } from "@/components/ui/card";
 import { Input, Label } from "@/components/ui/input";
 
 export default function BrandingPage() {
+  return (
+    <FeatureGate feature="white_label" fallbackTitle="White label requires Professional+">
+      <BrandingInner />
+    </FeatureGate>
+  );
+}
+
+function BrandingInner() {
   const qc = useQueryClient();
   const [productName, setProductName] = useState("");
   const [tagline, setTagline] = useState("");

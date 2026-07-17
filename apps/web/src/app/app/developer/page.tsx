@@ -1,5 +1,7 @@
 "use client";
 
+import { FeatureGate } from "@/components/feature-gate";
+
 import { useState } from "react";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
@@ -34,6 +36,14 @@ function CodeBlock({ label, code }: { label: string; code: string }) {
 }
 
 export default function DeveloperPortalPage() {
+  return (
+    <FeatureGate feature="api_access" fallbackTitle="API access requires Professional+">
+      <DeveloperPortalInner />
+    </FeatureGate>
+  );
+}
+
+function DeveloperPortalInner() {
   const [downloadError, setDownloadError] = useState<string | null>(null);
   const [downloading, setDownloading] = useState(false);
 

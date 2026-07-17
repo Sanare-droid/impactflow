@@ -312,6 +312,9 @@ async def create_beneficiary(
 ) -> BeneficiaryResponse:
     org_id = _require_org(ctx)
     ip, ua = client_meta(request)
+    from app.services import enterprise as ent
+
+    await ent.enforce_writable(db, org_id)
     beneficiary = await beneficiary_service.create_beneficiary(
         db,
         organization_id=org_id,

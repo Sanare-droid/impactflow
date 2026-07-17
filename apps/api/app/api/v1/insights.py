@@ -104,6 +104,9 @@ async def create_report(
 ) -> ReportResponse:
     org_id = _require_org(ctx)
     ip, ua = client_meta(request)
+    from app.services import enterprise as ent
+
+    await ent.enforce_writable(db, org_id)
     report = await insights_service.create_report(
         db,
         organization_id=org_id,

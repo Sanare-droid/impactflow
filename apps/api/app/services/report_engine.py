@@ -610,6 +610,52 @@ def _pptx_bytes(title: str, markdown: str) -> bytes:
     return buf.getvalue()
 
 
+def _pdf_bytes(title: str, body_md: str) -> bytes:
+    """Generate a real PDF document from report markdown."""
+    from reportlab.lib.pagesizes import letter
+    from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
+    from reportlab.lib.units import inch
+    from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer
+
+    buf = io.BytesIO()
+    doc = SimpleDocTemplate(
+        buf,
+        pagesize=letter,
+        leftMargin=0.85 * inch,
+        rightMargin=0.85 * inch,
+        topMargin=0.75 * inch,
+        bottomMargin=0.75 * inch,
+    )
+    styles = getSampleStyleSheet()
+    title_style = ParagraphStyle(
+        "ReportTitle",
+        parent=styles["Heading1"],
+        fontSize=18,
+        spaceAfter=12,
+        textColor="#134e4a",
+    )
+    h2 = ParagraphStyle("H2", parent=styles["Heading2"], fontSize=13, spaceBefore=10, spaceAfter=6)
+    body = ParagraphStyle("Body", parent=styles["Normal"], fontSize=10, leading=14, spaceAfter=6)
+    story: list = [Paragraph(escape(title), title_style), Spacer(1, 0.15 * inch)]
+    for line in body_md.splitlines():
+        if line.startswith("# "):
+            story.append(Paragraph(escape(line[2:]), title_style))
+        elif line.startswith("## "):
+            story.append(Paragraph(escape(line[3:]), h2))
+        elif line.startswith("### "):
+            story.append(Paragraph(escape(line[4:]), h2))
+        elif line.startswith("- "):
+            story.append(Paragraph(f"• {escape(line[2:])}", body))
+        elif line.strip() == "":
+            story.append(Spacer(1, 0.08 * inch))
+        else:
+            story.append(Paragraph(escape(line), body))
+    story.append(Spacer(1, 0.3 * inch))
+    story.append(Paragraph("<i>ImpactFlow · grounded export</i>", body))
+    doc.build(story)
+    return buf.getvalue()
+
+
 def export_report_payload(report: Report, fmt: str) -> tuple[bytes, str, str]:
     """Return (bytes, media_type, filename_ext) for supported formats."""
     md = render_report_markdown(report)
@@ -621,9 +667,7 @@ def export_report_payload(report: Report, fmt: str) -> tuple[bytes, str, str]:
     if fmt == "html":
         return _html_document(report.name, md).encode("utf-8"), "text/html; charset=utf-8", "html"
     if fmt == "pdf":
-        # Print-ready HTML intended for browser/PDF printers (no binary PDF engine dependency)
-        html = _html_document(report.name, md)
-        return html.encode("utf-8"), "text/html; charset=utf-8", "pdf.html"
+        return _pdf_bytes(report.name, md), "application/pdf", "pdf"
     if fmt == "csv":
         return _csv_bytes(report), "text/csv; charset=utf-8", "csv"
     if fmt in ("xlsx", "excel"):

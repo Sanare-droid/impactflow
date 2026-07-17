@@ -1,5 +1,7 @@
 "use client";
 
+import { FeatureGate } from "@/components/feature-gate";
+
 import { FormEvent, useMemo, useState } from "react";
 import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -1039,6 +1041,14 @@ function MappingsTab() {
 }
 
 export default function IntegrationsPage() {
+  return (
+    <FeatureGate feature="integrations" fallbackTitle="Integrations require Professional+">
+      <IntegrationsInner />
+    </FeatureGate>
+  );
+}
+
+function IntegrationsInner() {
   const qc = useQueryClient();
   const [tab, setTab] = useState("gallery");
 

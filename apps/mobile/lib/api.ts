@@ -3,7 +3,7 @@
  * Set EXPO_PUBLIC_API_URL to your machine LAN IP for device testing.
  */
 import * as SecureStore from "expo-secure-store";
-import { ACCESS_KEY, ORG_KEY, REFRESH_KEY } from "@/lib/sessionKeys";
+import { ACCESS_KEY, ORG_KEY, REFRESH_KEY, USER_KEY } from "@/lib/sessionKeys";
 
 const API_BASE =
   process.env.EXPO_PUBLIC_API_URL?.replace(/\/$/, "") || "http://127.0.0.1:8000";
@@ -13,7 +13,9 @@ export type Tokens = {
   access_token: string;
   refresh_token: string;
   mfa_required?: boolean;
+  organization_id?: string | null;
   user?: {
+    id?: string;
     first_name?: string;
     primary_organization_id?: string | null;
   };
@@ -134,6 +136,19 @@ export type Notification = {
   updated_at?: string;
 };
 
+export type MediaUploadResult = {
+  id: string;
+  organization_id?: string;
+  client_mutation_id?: string;
+  entity_type?: string;
+  file_name: string;
+  mime_type?: string | null;
+  file_size?: number;
+  status: string;
+  remote_url?: string | null;
+  error_message?: string | null;
+};
+
 export type Device = {
   id: string;
   organization_id: string;
@@ -214,21 +229,43 @@ class FieldApi {
   accessToken: string | null = null;
   refreshToken: string | null = null;
   organizationId: string | null = null;
+  userId: string | null = null;
+  private onSessionExpired: (() => void) | null = null;
+
+  setOnSessionExpired(cb: (() => void) | null) {
+    this.onSessionExpired = cb;
+  }
 
   setSession(tokens: {
     access_token: string;
     refresh_token: string;
     organization_id?: string | null;
+    user_id?: string | null;
   }) {
     this.accessToken = tokens.access_token;
     this.refreshToken = tokens.refresh_token;
     this.organizationId = tokens.organization_id ?? this.organizationId;
+    this.userId = tokens.user_id ?? this.userId;
   }
 
   clearSession() {
     this.accessToken = null;
     this.refreshToken = null;
     this.organizationId = null;
+    this.userId = null;
+  }
+
+  private async expireSession() {
+    this.clearSession();
+    try {
+      await SecureStore.deleteItemAsync(ACCESS_KEY);
+      await SecureStore.deleteItemAsync(REFRESH_KEY);
+      await SecureStore.deleteItemAsync(ORG_KEY);
+      await SecureStore.deleteItemAsync(USER_KEY);
+    } catch {
+      /* ignore */
+    }
+    this.onSessionExpired?.();
   }
 
   private async request<T>(
@@ -248,7 +285,7 @@ class FieldApi {
     if (res.status === 401 && retry && this.refreshToken) {
       const ok = await this.refresh();
       if (ok) return this.request<T>(path, options, false);
-      this.clearSession();
+      await this.expireSession();
     }
 
     if (!res.ok) {
@@ -267,21 +304,33 @@ class FieldApi {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ refresh_token: this.refreshToken }),
       });
-      if (!res.ok) return false;
+      if (!res.ok) {
+        await this.expireSession();
+        return false;
+      }
       const data = (await res.json()) as Tokens;
-      if (!data.access_token || !data.refresh_token) return false;
+      if (!data.access_token || !data.refresh_token) {
+        await this.expireSession();
+        return false;
+      }
       const orgId =
-        data.user?.primary_organization_id ?? this.organizationId;
+        data.organization_id ??
+        data.user?.primary_organization_id ??
+        this.organizationId;
+      const userId = data.user?.id ?? this.userId;
       this.setSession({
         access_token: data.access_token,
         refresh_token: data.refresh_token,
         organization_id: orgId,
+        user_id: userId,
       });
       await SecureStore.setItemAsync(ACCESS_KEY, data.access_token);
       await SecureStore.setItemAsync(REFRESH_KEY, data.refresh_token);
       if (orgId) await SecureStore.setItemAsync(ORG_KEY, orgId);
+      if (userId) await SecureStore.setItemAsync(USER_KEY, userId);
       return true;
     } catch {
+      await this.expireSession();
       return false;
     }
   }
@@ -430,12 +479,18 @@ class FieldApi {
     });
   }
 
-  listTasks(params: { page?: number; status?: string; updated_after?: string } = {}) {
+  listTasks(params: {
+    page?: number;
+    status?: string;
+    updated_after?: string;
+    assignee_id?: string;
+  } = {}) {
     const q = new URLSearchParams();
     q.set("page", String(params.page ?? 1));
     q.set("page_size", "100");
     if (params.status) q.set("status", params.status);
     if (params.updated_after) q.set("updated_after", params.updated_after);
+    if (params.assignee_id) q.set("assignee_id", params.assignee_id);
     return this.request<Paginated<Task>>(`/tasks?${q}`);
   }
 
@@ -446,6 +501,61 @@ class FieldApi {
     if (params.unread_only) q.set("unread_only", "true");
     if (params.updated_after) q.set("updated_after", params.updated_after);
     return this.request<Paginated<Notification>>(`/notifications?${q}`);
+  }
+
+  /** Upload a locally captured file (photo/video/audio) straight to object storage. */
+  async uploadMediaBinary(input: {
+    fileUri: string;
+    fileName: string;
+    mimeType?: string;
+    clientMutationId?: string;
+    entityType?: string;
+    entityId?: string;
+  }): Promise<MediaUploadResult> {
+    const buildForm = () => {
+      const form = new FormData();
+      // React Native's fetch/FormData accepts { uri, name, type } file descriptors directly.
+      form.append(
+        "file",
+        {
+          uri: input.fileUri,
+          name: input.fileName,
+          type: input.mimeType || "application/octet-stream",
+        } as unknown as Blob,
+      );
+      form.append(
+        "client_mutation_id",
+        input.clientMutationId ??
+          `mob-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,
+      );
+      form.append("entity_type", input.entityType ?? "survey_response");
+      if (input.entityId) form.append("entity_id", input.entityId);
+      return form;
+    };
+
+    const send = async () => {
+      const headers = new Headers();
+      if (this.accessToken) headers.set("Authorization", `Bearer ${this.accessToken}`);
+      if (this.organizationId) headers.set("X-Organization-Id", this.organizationId);
+      return fetch(`${API_V1}/media/uploads/binary`, {
+        method: "POST",
+        headers,
+        body: buildForm(),
+      }).catch(() => {
+        throw new Error("Unable to reach the server. Check your connection and try again.");
+      });
+    };
+
+    let res = await send();
+    if (res.status === 401 && this.refreshToken) {
+      const ok = await this.refresh();
+      if (ok) res = await send();
+    }
+    if (!res.ok) {
+      const body = (await res.json().catch(() => ({}))) as ApiErrorBody;
+      throw new Error(humanApiError(body, res.status));
+    }
+    return res.json();
   }
 }
 

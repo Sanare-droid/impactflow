@@ -1,34 +1,13 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
+import { api } from "@/lib/api";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
 
 export default function AuditPage() {
   const { data, isLoading, error } = useQuery({
     queryKey: ["audit-logs"],
-    queryFn: async () => {
-      const res = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000"}/api/v1/audit-logs`,
-        {
-          headers: {
-            Authorization: `Bearer ${localStorage.getItem("if_access_token")}`,
-            "X-Organization-Id": localStorage.getItem("if_organization_id") ?? "",
-          },
-        },
-      );
-      if (!res.ok) throw new Error("Unable to load audit logs");
-      return res.json() as Promise<{
-        items: Array<{
-          id: string;
-          action: string;
-          resource_type: string;
-          actor_email?: string;
-          description?: string;
-          created_at: string;
-          status: string;
-        }>;
-      }>;
-    },
+    queryFn: () => api.listAuditLogs({ page_size: 50 }),
   });
 
   return (

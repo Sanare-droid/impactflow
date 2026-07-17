@@ -1,5 +1,7 @@
 "use client";
 
+import { FeatureGate } from "@/components/feature-gate";
+
 import { FormEvent, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
@@ -9,6 +11,14 @@ import { Input, Label } from "@/components/ui/input";
 import { StatusBadge } from "@/components/ui/status-badge";
 
 export default function NarrativesPage() {
+  return (
+    <FeatureGate feature="ai" fallbackTitle="Narratives require Starter+">
+      <NarrativesInner />
+    </FeatureGate>
+  );
+}
+
+function NarrativesInner() {
   const qc = useQueryClient();
   const [name, setName] = useState("");
   const [narrativeType, setNarrativeType] = useState("executive_summary");

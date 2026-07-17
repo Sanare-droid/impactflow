@@ -341,15 +341,52 @@ function FieldWidget({
   if (type === "image" || type === "video" || type === "file" || type === "signature" || type === "audio") {
     const uri = typeof value === "object" && value ? (value as { uri?: string }).uri ?? "" : (value as string) ?? "";
     return (
-      <input
-        id={field.id}
-        type="text"
-        className={inputClass}
-        disabled={disabled}
-        placeholder="Paste a file/media URL (upload widget coming soon)"
-        value={uri}
-        onChange={(e) => onChange({ uri: e.target.value })}
-      />
+      <div className="space-y-2">
+        <input
+          id={field.id}
+          type="file"
+          className={inputClass}
+          disabled={disabled}
+          accept={
+            type === "image" || type === "signature"
+              ? "image/*"
+              : type === "video"
+                ? "video/*"
+                : type === "audio"
+                  ? "audio/*"
+                  : undefined
+          }
+          onChange={async (e) => {
+            const file = e.target.files?.[0];
+            if (!file) return;
+            try {
+              const { api } = await import("@/lib/api");
+              const uploaded = await api.uploadMediaBinary({
+                file,
+                fileName: file.name,
+                entityType: "survey_response",
+              });
+              onChange({
+                uri: uploaded.remote_url ?? "",
+                media_id: uploaded.id,
+                file_name: uploaded.file_name,
+                mime_type: uploaded.mime_type,
+              });
+            } catch (err) {
+              console.error(err);
+              onChange({ uri: "", error: err instanceof Error ? err.message : "Upload failed" });
+            }
+          }}
+        />
+        {uri ? (
+          <p className="truncate text-xs text-stone-500">
+            Uploaded:{" "}
+            <a href={uri} className="text-teal-700 underline" target="_blank" rel="noreferrer">
+              {uri}
+            </a>
+          </p>
+        ) : null}
+      </div>
     );
   }
 

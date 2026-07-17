@@ -60,9 +60,12 @@ export default function MapsPage() {
   return (
     <div className="animate-fade-up space-y-6">
       <div>
-        <h1 className="font-display text-3xl font-semibold tracking-tight">Maps</h1>
+        <h1 className="font-display text-3xl font-semibold tracking-tight">
+          Geo registry
+        </h1>
         <p className="mt-2 text-stone-500">
-          Site and coverage layers with point features for field geography.
+          Site and coverage layers with point features. Plot below is a simple
+          lat/lng canvas (not a full tile map).
         </p>
       </div>
 
@@ -158,6 +161,26 @@ export default function MapsPage() {
       {error && <p className="text-sm text-rose-600">{error}</p>}
 
       <Card>
+        <CardTitle>Point plot</CardTitle>
+        <CardDescription>
+          Normalized projection of registered coordinates (north-up).
+        </CardDescription>
+        <GeoPlot
+          points={(data?.items ?? []).flatMap((layer) =>
+            (layer.features ?? [])
+              .filter((f) => f.latitude != null && f.longitude != null)
+              .map((f) => ({
+                id: f.id,
+                name: f.name,
+                lat: Number(f.latitude),
+                lng: Number(f.longitude),
+                layer: layer.name,
+              })),
+          )}
+        />
+      </Card>
+
+      <Card>
         <CardTitle>Map layers</CardTitle>
         <div className="mt-4 space-y-5">
           {isLoading && <p className="text-sm text-stone-400">Loading…</p>}
@@ -190,5 +213,49 @@ export default function MapsPage() {
         </div>
       </Card>
     </div>
+  );
+}
+
+function GeoPlot({
+  points,
+}: {
+  points: Array<{ id: string; name: string; lat: number; lng: number; layer: string }>;
+}) {
+  if (points.length === 0) {
+    return (
+      <p className="mt-4 text-sm text-stone-400">
+        Add latitude/longitude features to see them plotted here.
+      </p>
+    );
+  }
+  const lats = points.map((p) => p.lat);
+  const lngs = points.map((p) => p.lng);
+  const minLat = Math.min(...lats);
+  const maxLat = Math.max(...lats);
+  const minLng = Math.min(...lngs);
+  const maxLng = Math.max(...lngs);
+  const pad = 0.05;
+  const dLat = Math.max(maxLat - minLat, 0.01);
+  const dLng = Math.max(maxLng - minLng, 0.01);
+  const w = 640;
+  const h = 320;
+  return (
+    <svg
+      viewBox={`0 0 ${w} ${h}`}
+      className="mt-4 w-full rounded-xl border border-stone-200 bg-[linear-gradient(180deg,#ecfdf5_0%,#fafaf9_100%)] dark:border-stone-800 dark:bg-stone-950"
+      role="img"
+      aria-label="Geo point plot"
+    >
+      {points.map((p) => {
+        const x = ((p.lng - minLng) / dLng) * (w * (1 - 2 * pad)) + w * pad;
+        const y = h - (((p.lat - minLat) / dLat) * (h * (1 - 2 * pad)) + h * pad);
+        return (
+          <g key={p.id}>
+            <circle cx={x} cy={y} r={6} fill="#0F766E" />
+            <title>{`${p.name} (${p.layer})`}</title>
+          </g>
+        );
+      })}
+    </svg>
   );
 }

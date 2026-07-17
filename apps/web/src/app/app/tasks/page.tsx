@@ -6,6 +6,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Card, CardTitle } from "@/components/ui/card";
+import { EmptyState } from "@/components/ui/empty-state";
 import { StatusBadge } from "@/components/ui/status-badge";
 
 export default function TasksPage() {
@@ -133,8 +134,13 @@ export default function TasksPage() {
               ))}
               {!isLoading && (data?.items.length ?? 0) === 0 && (
                 <tr>
-                  <td className="py-6 text-stone-400" colSpan={6}>
-                    No tasks yet. Open a project to create and assign work.
+                  <td className="py-6" colSpan={6}>
+                    <EmptyState
+                      title="No tasks yet"
+                      description="Open a project to create and assign work to field officers."
+                      actionLabel="Browse projects"
+                      actionHref="/app/projects"
+                    />
                   </td>
                 </tr>
               )}

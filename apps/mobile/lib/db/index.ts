@@ -289,3 +289,37 @@ export async function setMeta(key: string, value: string): Promise<void> {
     [key, value],
   );
 }
+
+/** Wipe local field data so a shared device does not leak the previous user's cache. */
+export async function wipeLocalData(): Promise<void> {
+  try {
+    const db = await getDb();
+    const tables = [
+      "media_queue",
+      "mutation_queue",
+      "survey_responses",
+      "surveys",
+      "tasks",
+      "notifications",
+      "beneficiaries",
+      "households",
+      "communities",
+      "sync_logs",
+      "search_index",
+      "user_profile",
+      "settings",
+      "sync_meta",
+    ];
+    await db.execAsync("PRAGMA foreign_keys = OFF");
+    for (const table of tables) {
+      await db.runAsync(`DELETE FROM ${table}`);
+    }
+    await db.execAsync("PRAGMA foreign_keys = ON");
+    await db.runAsync(
+      "INSERT INTO sync_meta (key, value) VALUES ('schema_version', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+      [String(SCHEMA_VERSION)],
+    );
+  } catch {
+    /* web / unsupported — ignore */
+  }
+}

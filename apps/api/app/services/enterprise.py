@@ -635,7 +635,7 @@ async def add_domain(
 
 
 async def verify_domain(
-    db: AsyncSession, organization_id: UUID, domain_id: UUID, *, simulate: bool = True
+    db: AsyncSession, organization_id: UUID, domain_id: UUID, *, simulate: bool = False
 ) -> OrganizationDomain:
     row = await db.scalar(
         select(OrganizationDomain).where(
@@ -646,14 +646,44 @@ async def verify_domain(
     if not row:
         raise NotFoundError("Domain not found")
     row.last_checked_at = utcnow()
-    # Production would check DNS TXT; simulate success for configured domains in v1
+    expected = f"impactflow-domain-verification={row.verification_token}"
+    txt_name = f"_impactflow-verify.{row.hostname}"
+
     if simulate:
         row.status = "active"
         row.verified_at = utcnow()
         row.ssl_status = "active"
         row.last_error = None
-    else:
-        row.status = "verifying"
+        await db.flush()
+        return row
+
+    try:
+        import httpx
+
+        url = f"https://cloudflare-dns.com/dns-query?name={txt_name}&type=TXT"
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.get(url, headers={"Accept": "application/dns-json"})
+            resp.raise_for_status()
+            data = resp.json()
+        texts: list[str] = []
+        for answer in data.get("Answer") or []:
+            if answer.get("type") == 16 and answer.get("data"):
+                texts.append(str(answer["data"]).strip('"'))
+        matched = any(expected in t for t in texts)
+        if matched:
+            row.status = "active"
+            row.verified_at = utcnow()
+            row.ssl_status = "active"
+            row.last_error = None
+        else:
+            row.status = "pending"
+            row.last_error = (
+                f"TXT at {txt_name} missing token. Found: {texts[:3] or 'none'}"
+            )
+    except Exception as exc:  # noqa: BLE001
+        row.status = "pending"
+        row.last_error = str(exc)[:500]
+
     await db.flush()
     return row
 

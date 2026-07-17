@@ -51,6 +51,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { useTheme } from "next-themes";
+import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { APP_NAME, api } from "@/lib/api";
 import { BrandLogo } from "@/components/brand-logo";
@@ -58,7 +59,15 @@ import { useAuth } from "@/providers/auth-provider";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 
-type NavItem = { href: string; label: string; icon: LucideIcon };
+type NavItem = {
+  href: string;
+  label: string;
+  icon: LucideIcon;
+  /** Plan feature flag required to show this nav item */
+  feature?: string;
+  /** Only platform admins / superusers */
+  platformAdminOnly?: boolean;
+};
 type NavGroup = { label: string; items: NavItem[] };
 
 const navGroups: NavGroup[] = [
@@ -94,13 +103,18 @@ const navGroups: NavGroup[] = [
       { href: "/app/indicators", label: "Indicators", icon: Target },
       { href: "/app/monitoring", label: "Monitoring", icon: Activity },
       { href: "/app/evaluations", label: "Evaluations", icon: ClipboardCheck },
-      { href: "/app/surveys", label: "Surveys", icon: ClipboardList },
+      { href: "/app/surveys", label: "Surveys", icon: ClipboardList, feature: "surveys" },
     ],
   },
   {
     label: "Field",
     items: [
-      { href: "/app/field-operations", label: "Field Operations", icon: Smartphone },
+      {
+        href: "/app/field-operations",
+        label: "Field Operations",
+        icon: Smartphone,
+        feature: "field_ops",
+      },
       { href: "/app/communities", label: "Communities", icon: MapPinned },
       { href: "/app/households", label: "Households", icon: Home },
       { href: "/app/beneficiaries", label: "Beneficiaries", icon: UsersRound },
@@ -109,7 +123,7 @@ const navGroups: NavGroup[] = [
   {
     label: "Insights",
     items: [
-      { href: "/app/executive", label: "Executive", icon: Gauge },
+      { href: "/app/executive", label: "Executive", icon: Gauge, feature: "executive" },
       { href: "/app/reports", label: "Reports", icon: FileText },
       { href: "/app/analytics", label: "Analytics", icon: BarChart3 },
       { href: "/app/dashboards", label: "Dashboards", icon: LayoutPanelTop },
@@ -120,20 +134,25 @@ const navGroups: NavGroup[] = [
   {
     label: "AI",
     items: [
-      { href: "/app/copilot", label: "AI Copilot", icon: Sparkles },
-      { href: "/app/predictions", label: "Predictions", icon: BrainCircuit },
-      { href: "/app/narratives", label: "Narratives", icon: Scroll },
-      { href: "/app/knowledge", label: "Knowledge", icon: BookOpenText },
+      { href: "/app/copilot", label: "AI Copilot", icon: Sparkles, feature: "ai" },
+      { href: "/app/predictions", label: "Predictions", icon: BrainCircuit, feature: "ai" },
+      { href: "/app/narratives", label: "Narratives", icon: Scroll, feature: "ai" },
+      { href: "/app/knowledge", label: "Knowledge", icon: BookOpenText, feature: "ai" },
     ],
   },
   {
     label: "Platform",
     items: [
-      { href: "/app/workflows", label: "Workflows", icon: Workflow },
-      { href: "/app/marketplace", label: "Marketplace", icon: Store },
-      { href: "/app/integrations", label: "Integrations", icon: Plug },
-      { href: "/app/developer", label: "Developer", icon: Code2 },
-      { href: "/app/branding", label: "White label", icon: Palette },
+      { href: "/app/workflows", label: "Workflows", icon: Workflow, feature: "workflows" },
+      { href: "/app/marketplace", label: "Marketplace", icon: Store, feature: "marketplace" },
+      {
+        href: "/app/integrations",
+        label: "Integrations",
+        icon: Plug,
+        feature: "integrations",
+      },
+      { href: "/app/developer", label: "Developer", icon: Code2, feature: "api_access" },
+      { href: "/app/branding", label: "White label", icon: Palette, feature: "white_label" },
       { href: "/app/onboarding", label: "Onboarding", icon: Rocket },
     ],
   },
@@ -144,9 +163,19 @@ const navGroups: NavGroup[] = [
       { href: "/app/roles", label: "Roles", icon: Shield },
       { href: "/app/organization", label: "Organization", icon: Building2 },
       { href: "/app/billing", label: "Billing", icon: CreditCard },
-      { href: "/app/platform/billing", label: "Platform billing", icon: Landmark },
-      { href: "/app/customer-success", label: "Success", icon: HeartPulse },
-      { href: "/app/ops", label: "Operations", icon: Activity },
+      {
+        href: "/app/platform/billing",
+        label: "Platform billing",
+        icon: Landmark,
+        platformAdminOnly: true,
+      },
+      {
+        href: "/app/customer-success",
+        label: "Success",
+        icon: HeartPulse,
+        platformAdminOnly: true,
+      },
+      { href: "/app/ops", label: "Operations", icon: Activity, platformAdminOnly: true },
       { href: "/app/audit", label: "Audit", icon: ScrollText },
       { href: "/app/settings", label: "Settings", icon: Settings },
     ],
@@ -163,7 +192,28 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     queryFn: () => api.notificationsUnreadCount(),
     refetchInterval: 30_000,
   });
+  const { data: featuresPayload } = useQuery({
+    queryKey: ["features"],
+    queryFn: () => api.getFeatures(),
+    staleTime: 60_000,
+  });
+  const features = featuresPayload?.features ?? {};
+  const isPlatformAdmin = Boolean(user?.is_platform_admin || user?.is_superuser);
   const unreadCount = unread?.unread_count ?? 0;
+
+  const visibleGroups = useMemo(() => {
+    return navGroups
+      .map((group) => ({
+        ...group,
+        items: group.items.filter((item) => {
+          if (item.platformAdminOnly && !isPlatformAdmin) return false;
+          if (item.feature && features[item.feature] === false) return false;
+          // If features not loaded yet, show items (avoid empty nav flash)
+          return true;
+        }),
+      }))
+      .filter((g) => g.items.length > 0);
+  }, [features, isPlatformAdmin]);
 
   return (
     <div className="min-h-screen bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-teal-50 via-stone-50 to-stone-100 dark:from-stone-950 dark:via-stone-950 dark:to-teal-950/40">
@@ -184,7 +234,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </Link>
 
           <nav className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto overscroll-contain pr-1 [-ms-overflow-style:auto] [scrollbar-gutter:stable] [scrollbar-width:thin]">
-            {navGroups.map((group) => (
+            {visibleGroups.map((group) => (
               <div key={group.label} className="space-y-1">
                 <p className="px-3 text-[10px] font-semibold uppercase tracking-wider text-stone-400">
                   {group.label}
@@ -201,26 +251,19 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                       key={item.href}
                       href={item.href}
                       className={cn(
-                        "flex shrink-0 items-center gap-3 rounded-xl px-3 py-2 text-sm transition-colors",
+                        "flex items-center gap-2.5 rounded-xl px-3 py-2 text-sm font-medium transition",
                         active
-                          ? "bg-teal-700 text-white shadow-sm dark:bg-teal-600"
+                          ? "bg-teal-700 text-white shadow-sm"
                           : "text-stone-600 hover:bg-stone-100 dark:text-stone-300 dark:hover:bg-stone-900",
                       )}
                     >
-                      <Icon className="h-4 w-4 shrink-0" />
-                      <span className="flex-1">{item.label}</span>
-                      {showBadge && (
-                        <span
-                          className={cn(
-                            "rounded-md px-1.5 py-0.5 text-[10px] font-semibold tabular-nums",
-                            active
-                              ? "bg-white/20 text-white"
-                              : "bg-teal-700 text-white dark:bg-teal-600",
-                          )}
-                        >
+                      <Icon className="h-4 w-4 shrink-0 opacity-80" />
+                      <span className="truncate">{item.label}</span>
+                      {showBadge ? (
+                        <span className="ml-auto rounded-full bg-rose-500 px-1.5 py-0.5 text-[10px] font-semibold text-white">
                           {unreadCount > 99 ? "99+" : unreadCount}
                         </span>
-                      )}
+                      ) : null}
                     </Link>
                   );
                 })}
@@ -228,71 +271,33 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             ))}
           </nav>
 
-          <div className="mt-3 shrink-0 space-y-2 border-t border-stone-200/80 pt-4 dark:border-stone-800">
-            <div className="px-2 text-sm">
-              <p className="font-medium text-stone-900 dark:text-stone-100">
-                {user?.display_name ||
-                  `${user?.first_name ?? ""} ${user?.last_name ?? ""}`.trim()}
-              </p>
-              <p className="truncate text-xs text-stone-500">{user?.email}</p>
-            </div>
+          <div className="mt-4 shrink-0 space-y-2 border-t border-stone-200/70 pt-4 dark:border-stone-800">
+            <p className="truncate px-2 text-xs text-stone-500">{user?.email}</p>
             <div className="flex gap-2">
               <Button
-                variant="ghost"
-                size="icon"
-                aria-label="Toggle theme"
+                variant="secondary"
+                size="sm"
+                className="flex-1"
                 onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
               >
-                {theme === "dark" ? (
-                  <Sun className="h-4 w-4" />
-                ) : (
-                  <Moon className="h-4 w-4" />
-                )}
+                {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
               </Button>
               <Button
-                variant="ghost"
-                className="flex-1 justify-start"
+                variant="secondary"
+                size="sm"
+                className="flex-1"
                 onClick={async () => {
                   await logout();
                   router.push("/login");
                 }}
               >
                 <LogOut className="h-4 w-4" />
-                Sign out
               </Button>
             </div>
           </div>
         </aside>
 
-        <main id="main-content" className="flex-1 p-4 md:p-8" tabIndex={-1}>
-          <div className="mb-6 flex items-center justify-between md:hidden">
-            <BrandLogo size={32} withWordmark wordmark={APP_NAME} wordmarkClassName="text-base" />
-            <div className="flex items-center gap-1">
-              <Button
-                variant="ghost"
-                size="icon"
-                aria-label="Notifications"
-                onClick={() => router.push("/app/notifications")}
-                className="relative"
-              >
-                <Bell className="h-4 w-4" />
-                {unreadCount > 0 && (
-                  <span className="absolute right-1 top-1 h-2 w-2 rounded-full bg-teal-600" />
-                )}
-              </Button>
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
-              >
-                {theme === "dark" ? (
-                  <Sun className="h-4 w-4" />
-                ) : (
-                  <Moon className="h-4 w-4" />
-                )}
-              </Button>
-            </div>
-          </div>
+        <main id="main-content" className="min-w-0 flex-1 p-4 md:p-8">
           {children}
         </main>
       </div>

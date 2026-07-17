@@ -80,6 +80,9 @@ async def create_program(
 ) -> ProgramResponse:
     org_id = _require_org(ctx)
     ip, ua = client_meta(request)
+    from app.services import enterprise as ent
+
+    await ent.enforce_writable(db, org_id)
     program = await program_service.create_program(
         db,
         organization_id=org_id,

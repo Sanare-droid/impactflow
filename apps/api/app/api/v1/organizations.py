@@ -9,10 +9,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.api.deps import RequestContext, client_meta, get_current_context, require_permissions
-from app.core.exceptions import NotFoundError
+from app.core.exceptions import AppError, ConflictError, NotFoundError
 from app.db.session import get_db
 from app.models.membership import OrganizationMembership
-from app.models.permission import RolePermission
+from app.models.permission import Permission, RolePermission
 from app.models.role import Role
 from app.schemas import (
     InviteUserRequest,
@@ -22,7 +22,9 @@ from app.schemas import (
     PaginatedResponse,
     PaginationMeta,
     PermissionResponse,
+    RoleCreateRequest,
     RoleResponse,
+    RoleUpdateRequest,
     UpdateMembershipRoleRequest,
     UserBrief,
     UserResponse,
@@ -175,6 +177,7 @@ async def invite_user(
     )
     await enforce_rate_limit(key=f"rl:invite:ip:{ip or 'unknown'}", limit=30, window_seconds=60)
 
+    await ent.enforce_writable(db, ctx.organization.id)
     await ent.enforce_seat_limit(db, ctx.organization.id)
     user, temp_password, delivery = await auth_service.invite_user(
         db,
@@ -344,6 +347,131 @@ async def list_roles(
             )
         )
     return roles
+
+
+def _slugify(value: str) -> str:
+    import re
+
+    slug = re.sub(r"[^a-z0-9]+", "-", value.lower()).strip("-")
+    return slug or "role"
+
+
+async def _role_response(db: AsyncSession, role: Role) -> RoleResponse:
+    result = await db.execute(
+        select(Role)
+        .options(selectinload(Role.role_permissions).selectinload(RolePermission.permission))
+        .where(Role.id == role.id)
+    )
+    loaded = result.scalar_one()
+    return RoleResponse(
+        id=loaded.id,
+        name=loaded.name,
+        slug=loaded.slug,
+        description=loaded.description,
+        is_system=loaded.is_system,
+        is_default=loaded.is_default,
+        organization_id=loaded.organization_id,
+        permissions=[rp.permission.code for rp in loaded.role_permissions],
+    )
+
+
+@router.post("/roles", response_model=RoleResponse, status_code=201)
+async def create_role(
+    body: RoleCreateRequest,
+    request: Request,
+    ctx: Annotated[RequestContext, Depends(require_permissions("roles:manage"))],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> RoleResponse:
+    if not ctx.organization:
+        raise NotFoundError("No active organization context")
+    slug = body.slug or _slugify(body.name)
+    existing = await db.scalar(
+        select(Role).where(
+            Role.organization_id == ctx.organization.id,
+            Role.slug == slug,
+        )
+    )
+    if existing:
+        raise ConflictError("A role with this slug already exists")
+    role = Role(
+        organization_id=ctx.organization.id,
+        name=body.name,
+        slug=slug,
+        description=body.description,
+        is_system=False,
+        is_default=body.is_default,
+    )
+    db.add(role)
+    await db.flush()
+    if body.permissions:
+        perms = await db.scalars(select(Permission).where(Permission.code.in_(body.permissions)))
+        for perm in perms:
+            db.add(RolePermission(role_id=role.id, permission_id=perm.id))
+    ip, ua = client_meta(request)
+    await write_audit_log(
+        db,
+        action="roles.create",
+        resource_type="role",
+        resource_id=role.id,
+        organization_id=ctx.organization.id,
+        actor_id=ctx.user.id,
+        actor_email=ctx.user.email,
+        description=f"Created role {role.name}",
+        ip_address=ip,
+        user_agent=ua,
+    )
+    await db.flush()
+    return await _role_response(db, role)
+
+
+@router.patch("/roles/{role_id}", response_model=RoleResponse)
+async def update_role(
+    role_id: UUID,
+    body: RoleUpdateRequest,
+    request: Request,
+    ctx: Annotated[RequestContext, Depends(require_permissions("roles:manage"))],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> RoleResponse:
+    if not ctx.organization:
+        raise NotFoundError("No active organization context")
+    role = await db.scalar(
+        select(Role).where(
+            Role.id == role_id,
+            Role.organization_id == ctx.organization.id,
+        )
+    )
+    if not role:
+        raise NotFoundError("Role not found")
+    if role.is_system and body.permissions is not None:
+        raise AppError("System role permissions cannot be replaced", code="FORBIDDEN")
+    if body.name is not None:
+        role.name = body.name
+    if body.description is not None:
+        role.description = body.description
+    if body.is_default is not None:
+        role.is_default = body.is_default
+    if body.permissions is not None and not role.is_system:
+        existing = await db.scalars(select(RolePermission).where(RolePermission.role_id == role.id))
+        for rp in existing:
+            await db.delete(rp)
+        perms = await db.scalars(select(Permission).where(Permission.code.in_(body.permissions)))
+        for perm in perms:
+            db.add(RolePermission(role_id=role.id, permission_id=perm.id))
+    ip, ua = client_meta(request)
+    await write_audit_log(
+        db,
+        action="roles.update",
+        resource_type="role",
+        resource_id=role.id,
+        organization_id=ctx.organization.id,
+        actor_id=ctx.user.id,
+        actor_email=ctx.user.email,
+        description=f"Updated role {role.name}",
+        ip_address=ip,
+        user_agent=ua,
+    )
+    await db.flush()
+    return await _role_response(db, role)
 
 
 @router.get("/permissions", response_model=list[PermissionResponse])

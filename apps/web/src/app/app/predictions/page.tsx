@@ -1,5 +1,7 @@
 "use client";
 
+import { FeatureGate } from "@/components/feature-gate";
+
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
@@ -8,6 +10,14 @@ import { Card, CardDescription, CardTitle } from "@/components/ui/card";
 import { StatusBadge } from "@/components/ui/status-badge";
 
 export default function PredictionsPage() {
+  return (
+    <FeatureGate feature="ai" fallbackTitle="Predictions require Starter+">
+      <PredictionsInner />
+    </FeatureGate>
+  );
+}
+
+function PredictionsInner() {
   const qc = useQueryClient();
   const [error, setError] = useState<string | null>(null);
 

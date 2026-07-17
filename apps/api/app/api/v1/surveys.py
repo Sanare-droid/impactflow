@@ -643,13 +643,27 @@ async def export_survey_responses(
             media_type="text/csv",
             headers={"Content-Disposition": f'attachment; filename="survey-{survey_id}-responses.csv"'},
         )
-    if fmt in {"html", "pdf"}:
-        # HTML is print-to-PDF friendly; clients may request format=pdf for the same payload.
+    if fmt == "html":
         body = await survey_service.export_responses_html(db, org_id, survey_id)
         return PlainTextResponse(
             body,
             media_type="text/html",
             headers={"Content-Disposition": f'attachment; filename="survey-{survey_id}-responses.html"'},
+        )
+    if fmt == "pdf":
+        from app.services.report_engine import _pdf_bytes
+
+        html = await survey_service.export_responses_html(db, org_id, survey_id)
+        # Strip tags lightly for PDF body text
+        import re
+
+        text = re.sub(r"<[^>]+>", "\n", html)
+        text = re.sub(r"\n{3,}", "\n\n", text).strip()
+        pdf = _pdf_bytes(f"Survey {survey_id} responses", text)
+        return Response(
+            content=pdf,
+            media_type="application/pdf",
+            headers={"Content-Disposition": f'attachment; filename="survey-{survey_id}-responses.pdf"'},
         )
     if fmt in {"xlsx", "excel", "xls"}:
         body = await survey_service.export_responses_excel_xml(db, org_id, survey_id)

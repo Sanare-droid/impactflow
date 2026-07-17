@@ -237,3 +237,42 @@ async def mfa_disable(
         raise ForbiddenError("MFA requires user session")
     await auth_service.disable_mfa(db, ctx.user, body.code)
     return MessageResponse(message="MFA disabled")
+
+
+@router.get("/sso/start")
+async def sso_start(
+    db: Annotated[AsyncSession, Depends(get_db)],
+    organization_slug: str,
+    redirect_uri: str,
+) -> dict:
+    return await auth_service.start_sso_login(
+        db,
+        organization_slug=organization_slug,
+        redirect_uri=redirect_uri,
+    )
+
+
+@router.post("/sso/callback", response_model=TokenResponse)
+async def sso_callback(
+    request: Request,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    code: str,
+    state: str,
+    redirect_uri: str | None = None,
+) -> TokenResponse:
+    ip, ua = client_meta(request)
+    result = await auth_service.complete_sso_login(
+        db,
+        code=code,
+        state=state,
+        redirect_uri=redirect_uri,
+        ip_address=ip,
+        user_agent=ua,
+    )
+    return TokenResponse(
+        access_token=result["access_token"],
+        refresh_token=result["refresh_token"],
+        expires_in=result["expires_in"],
+        user=UserBrief.model_validate(result["user"]),
+        organization_id=result["organization"].id if result.get("organization") else None,
+    )

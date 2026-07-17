@@ -959,3 +959,196 @@ async def get_dashboard_stats(db: AsyncSession, organization_id: UUID) -> dict:
         **notify_counts,
         **survey_counts,
     }
+
+
+async def start_sso_login(
+    db: AsyncSession,
+    *,
+    organization_slug: str,
+    redirect_uri: str,
+) -> dict:
+    """Build OIDC authorize URL for an organization's SSO configuration."""
+    from urllib.parse import urlencode
+    from uuid import uuid4
+
+    from app.models.enterprise import SsoConfiguration
+
+    slug = organization_slug.strip().lower()
+    org = await db.scalar(select(Organization).where(Organization.slug == slug))
+    if not org:
+        raise NotFoundError("Organization not found")
+    sso = await db.scalar(
+        select(SsoConfiguration).where(
+            SsoConfiguration.organization_id == org.id,
+            SsoConfiguration.status.in_(("active", "enabled", "draft")),
+        )
+    )
+    if not sso:
+        raise NotFoundError("SSO is not configured for this organization")
+    cfg = dict(sso.config or {})
+    authorize = cfg.get("authorize_url") or cfg.get("authorization_endpoint")
+    client_id = cfg.get("client_id")
+    if not authorize or not client_id:
+        raise AppError(
+            "SSO config missing authorize_url / client_id",
+            code="sso_misconfigured",
+        )
+    state = f"{org.id}:{uuid4().hex}"
+    meta = dict(sso.metadata_ or {})
+    meta["pending_oauth_state"] = state
+    meta["pending_redirect_uri"] = redirect_uri
+    sso.metadata_ = meta
+    await db.flush()
+    scopes = cfg.get("scopes") or ["openid", "email", "profile"]
+    if isinstance(scopes, str):
+        scope = scopes
+    else:
+        scope = " ".join(scopes)
+    params = {
+        "client_id": client_id,
+        "response_type": "code",
+        "redirect_uri": redirect_uri,
+        "state": state,
+        "scope": scope,
+    }
+    sep = "&" if "?" in authorize else "?"
+    return {
+        "authorize_url": f"{authorize}{sep}{urlencode(params)}",
+        "state": state,
+        "organization_id": str(org.id),
+        "provider": sso.provider,
+    }
+
+
+async def complete_sso_login(
+    db: AsyncSession,
+    *,
+    code: str,
+    state: str,
+    redirect_uri: Optional[str] = None,
+    ip_address: Optional[str] = None,
+    user_agent: Optional[str] = None,
+) -> dict:
+    """Exchange OIDC code, find/create user membership, issue ImpactFlow tokens."""
+    import httpx
+
+    from app.models.enterprise import SsoConfiguration
+
+    parts = (state or "").split(":")
+    if len(parts) < 1:
+        raise AppError("Invalid SSO state", code="VALIDATION_ERROR")
+    try:
+        org_id = UUID(parts[0])
+    except ValueError as exc:
+        raise AppError("Invalid SSO state", code="VALIDATION_ERROR") from exc
+
+    sso = await db.scalar(
+        select(SsoConfiguration).where(SsoConfiguration.organization_id == org_id)
+    )
+    if not sso:
+        raise NotFoundError("SSO configuration not found")
+    meta = dict(sso.metadata_ or {})
+    if meta.get("pending_oauth_state") and meta["pending_oauth_state"] != state:
+        raise AppError("SSO state mismatch", code="sso_state_mismatch")
+    redirect = redirect_uri or meta.get("pending_redirect_uri")
+    if not redirect:
+        raise AppError("redirect_uri required", code="VALIDATION_ERROR")
+
+    cfg = dict(sso.config or {})
+    secrets = dict(sso.secrets_ or {})
+    token_url = cfg.get("token_url") or cfg.get("token_endpoint")
+    client_id = cfg.get("client_id")
+    client_secret = secrets.get("client_secret") or cfg.get("client_secret")
+    if not token_url or not client_id:
+        raise AppError("SSO token endpoint / client_id missing", code="sso_misconfigured")
+
+    data = {
+        "grant_type": "authorization_code",
+        "code": code,
+        "redirect_uri": redirect,
+        "client_id": client_id,
+    }
+    if client_secret:
+        data["client_secret"] = client_secret
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        resp = await client.post(token_url, data=data)
+        if resp.status_code >= 400:
+            raise AppError(f"SSO token exchange failed: {resp.text[:300]}", code="sso_exchange_failed")
+        tokens = resp.json()
+
+    email = None
+    # Prefer userinfo endpoint when configured
+    userinfo_url = cfg.get("userinfo_url") or cfg.get("userinfo_endpoint")
+    access = tokens.get("access_token")
+    if userinfo_url and access:
+        async with httpx.AsyncClient(timeout=20.0) as client:
+            ui = await client.get(
+                userinfo_url,
+                headers={"Authorization": f"Bearer {access}"},
+            )
+            if ui.status_code < 400:
+                profile = ui.json()
+                email = profile.get("email")
+    if not email and tokens.get("id_token"):
+        # Decode JWT payload without verifying signature (IdP already issued it over TLS).
+        import base64
+        import json as json_lib
+
+        try:
+            payload_b64 = tokens["id_token"].split(".")[1]
+            payload_b64 += "=" * (-len(payload_b64) % 4)
+            claims = json_lib.loads(base64.urlsafe_b64decode(payload_b64.encode()))
+            email = claims.get("email") or claims.get("preferred_username")
+        except Exception:  # noqa: BLE001
+            email = None
+    if not email:
+        raise AppError("SSO provider did not return an email claim", code="sso_no_email")
+
+    email_norm = str(email).lower().strip()
+    user = await db.scalar(select(User).where(User.email == email_norm))
+    if not user:
+        raise ForbiddenError(
+            "No ImpactFlow account for this SSO email. Ask an admin to invite you first."
+        )
+    permissions, role, membership = await get_user_permissions(db, user.id, org_id)
+    if not membership:
+        raise ForbiddenError("You are not a member of this organization")
+    roles = [role.slug] if role else []
+
+    user.last_login_at = utcnow()
+    access_token, refresh_token = await issue_tokens(
+        db,
+        user=user,
+        organization_id=org_id,
+        roles=roles,
+        permissions=permissions,
+        ip_address=ip_address,
+        user_agent=user_agent,
+        mfa_verified=True,
+    )
+    meta.pop("pending_oauth_state", None)
+    sso.metadata_ = meta
+    sso.status = "active"
+    await db.flush()
+    await write_audit_log(
+        db,
+        action="auth.sso_login",
+        resource_type="user",
+        resource_id=user.id,
+        organization_id=org_id,
+        actor_id=user.id,
+        actor_email=user.email,
+        description=f"SSO login via {sso.provider}",
+        ip_address=ip_address,
+        user_agent=user_agent,
+    )
+    org = await db.get(Organization, org_id)
+    return {
+        "access_token": access_token,
+        "refresh_token": refresh_token,
+        "token_type": "bearer",
+        "expires_in": settings.access_token_expire_minutes * 60,
+        "mfa_required": False,
+        "user": user,
+        "organization": org,
+    }

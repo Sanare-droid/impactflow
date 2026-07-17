@@ -646,8 +646,35 @@ export async function updateLocalBeneficiary(
       entity_type: "beneficiary",
       local_id,
       op: "update",
-      payload,
+      payload: {
+        server_id: existing.server_id,
+        first_name: input.first_name ?? existing.first_name,
+        last_name: input.last_name ?? existing.last_name,
+        phone: input.phone ?? existing.phone,
+      },
     });
+  } else {
+    // Edit before first sync — refresh pending create payload
+    const db2 = await getDb();
+    const pending = await db2.getFirstAsync<{ id: string; payload_json: string }>(
+      `SELECT id, payload_json FROM mutation_queue
+       WHERE local_id = ? AND entity_type = 'beneficiary' AND op = 'create'
+         AND status IN ('pending', 'failed')
+       ORDER BY created_at DESC LIMIT 1`,
+      [local_id],
+    );
+    if (pending) {
+      const next = {
+        ...JSON.parse(pending.payload_json),
+        first_name: input.first_name ?? existing.first_name,
+        last_name: input.last_name ?? existing.last_name,
+        phone: input.phone ?? existing.phone,
+      };
+      await db2.runAsync(
+        `UPDATE mutation_queue SET payload_json = ?, updated_at = ?, status = 'pending' WHERE id = ?`,
+        [JSON.stringify(next), nowIso(), pending.id],
+      );
+    }
   }
   await indexSearchEntry({
     entity_type: "beneficiary",
@@ -777,6 +804,85 @@ export async function countOpenTasks(): Promise<number> {
   return row?.c ?? 0;
 }
 
+export async function updateLocalTaskStatus(
+  local_id: string,
+  status: string,
+): Promise<void> {
+  const db = await getDb();
+  const existing = await getLocalTask(local_id);
+  if (!existing) throw new Error("Task not found");
+  if (!existing.server_id) throw new Error("Task is not synced yet");
+  const now = nowIso();
+  const completed_at = status === "done" ? now : null;
+  await db.runAsync(
+    `UPDATE tasks SET status = ?, completed_at = ?, sync_status = 'pending',
+      last_error = NULL, updated_at_local = ? WHERE local_id = ?`,
+    [status, completed_at, now, local_id],
+  );
+  await enqueueMutation({
+    entity_type: "task",
+    local_id,
+    op: "update",
+    payload: {
+      server_id: existing.server_id,
+      status,
+      ...(status === "done" ? { completed_at } : {}),
+    },
+  });
+}
+
+export async function markTaskSynced(
+  local_id: string,
+  remote?: { status?: string; completed_at?: string | null; updated_at?: string },
+): Promise<void> {
+  const db = await getDb();
+  await db.runAsync(
+    `UPDATE tasks SET sync_status = 'synced', last_error = NULL,
+      status = COALESCE(?, status),
+      completed_at = CASE WHEN ? IS NOT NULL THEN ? ELSE completed_at END,
+      updated_at_server = COALESCE(?, updated_at_server),
+      updated_at_local = ?
+     WHERE local_id = ?`,
+    [
+      remote?.status ?? null,
+      remote?.completed_at ?? null,
+      remote?.completed_at ?? null,
+      remote?.updated_at ?? null,
+      nowIso(),
+      local_id,
+    ],
+  );
+}
+
+export async function markTaskFailed(local_id: string, message: string): Promise<void> {
+  const db = await getDb();
+  await db.runAsync(
+    `UPDATE tasks SET sync_status = 'failed', last_error = ?, updated_at_local = ? WHERE local_id = ?`,
+    [message, nowIso(), local_id],
+  );
+}
+
+/** Remove local tasks that are no longer assigned to this user on the server. */
+export async function purgeTasksNotIn(serverIds: string[]): Promise<number> {
+  const db = await getDb();
+  const keep = new Set(serverIds);
+  const rows = await db.getAllAsync<LocalTask>(
+    "SELECT * FROM tasks WHERE server_id IS NOT NULL AND sync_status = 'synced'",
+  );
+  let removed = 0;
+  for (const row of rows) {
+    if (row.server_id && !keep.has(row.server_id)) {
+      await db.runAsync("DELETE FROM tasks WHERE local_id = ?", [row.local_id]);
+      await db.runAsync(
+        "DELETE FROM search_index WHERE entity_type = 'task' AND entity_local_id = ?",
+        [row.local_id],
+      );
+      removed += 1;
+    }
+  }
+  return removed;
+}
+
 // -------- Notifications (cache from sync pull only) --------
 
 export async function upsertServerNotification(remote: {
@@ -869,10 +975,22 @@ export async function countUnreadNotifications(): Promise<number> {
 
 export async function markNotificationRead(local_id: string): Promise<void> {
   const db = await getDb();
+  const existing = await db.getFirstAsync<LocalNotification>(
+    "SELECT * FROM notifications WHERE local_id = ?",
+    [local_id],
+  );
   await db.runAsync(
-    "UPDATE notifications SET read_at = ?, updated_at_local = ? WHERE local_id = ?",
+    "UPDATE notifications SET read_at = ?, updated_at_local = ?, sync_status = 'pending' WHERE local_id = ?",
     [nowIso(), nowIso(), local_id],
   );
+  if (existing?.server_id) {
+    await enqueueMutation({
+      entity_type: "notification",
+      local_id,
+      op: "update",
+      payload: { server_id: existing.server_id },
+    });
+  }
 }
 
 // -------- Media queue --------

@@ -161,7 +161,33 @@ export default function LoginPage() {
           >
             {loading ? "Signing in…" : "Sign in"}
           </Button>
+          <Button
+            className="w-full"
+            type="button"
+            variant="secondary"
+            disabled={loading || organizationSlug.trim().length < 2}
+            onClick={async () => {
+              setLoading(true);
+              setError(null);
+              try {
+                const redirectUri = `${window.location.origin}/sso/callback`;
+                const started = await api.startSsoLogin(
+                  organizationSlug.trim(),
+                  redirectUri,
+                );
+                window.location.href = started.authorize_url;
+              } catch (err) {
+                setError(err instanceof Error ? err.message : "SSO start failed");
+                setLoading(false);
+              }
+            }}
+          >
+            Sign in with SSO
+          </Button>
         </form>
+        <p className="mt-2 text-xs text-stone-500">
+          SSO requires your organization slug and an active OIDC config.
+        </p>
         <p className="mt-4 text-sm text-stone-500">
           <Link className="text-teal-700 underline dark:text-teal-300" href="/forgot-password">
             Forgot password?
