@@ -56,6 +56,7 @@ async def register(
         refresh_token=refresh,
         expires_in=settings.access_token_expire_minutes * 60,
         user=UserBrief.model_validate(user),
+        organization_id=org.id,
     )
 
 
@@ -106,6 +107,7 @@ async def login(
         refresh_token=result["refresh_token"],
         expires_in=settings.access_token_expire_minutes * 60,
         user=UserBrief.model_validate(result["user"]),
+        organization_id=result["organization"].id if result.get("organization") else None,
     )
 
 
@@ -116,7 +118,7 @@ async def refresh(
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> TokenResponse:
     ip, ua = client_meta(request)
-    access, refresh_token, user, _org_id = await auth_service.rotate_refresh_token(
+    access, refresh_token, user, org_id = await auth_service.rotate_refresh_token(
         db,
         raw_refresh=body.refresh_token,
         ip_address=ip,
@@ -127,6 +129,7 @@ async def refresh(
         refresh_token=refresh_token,
         expires_in=settings.access_token_expire_minutes * 60,
         user=UserBrief.model_validate(user),
+        organization_id=org_id,
     )
 
 

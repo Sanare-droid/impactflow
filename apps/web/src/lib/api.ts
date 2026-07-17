@@ -39,7 +39,22 @@ export type TokenResponse = {
   expires_in: number;
   mfa_required: boolean;
   user: UserBrief;
+  organization_id?: string | null;
 };
+
+function orgIdFromAccessToken(token: string | null | undefined): string | null {
+  if (!token) return null;
+  try {
+    const part = token.split(".")[1];
+    if (!part) return null;
+    const normalized = part.replace(/-/g, "+").replace(/_/g, "/");
+    const padded = normalized + "=".repeat((4 - (normalized.length % 4)) % 4);
+    const payload = JSON.parse(atob(padded)) as { org_id?: string };
+    return typeof payload.org_id === "string" ? payload.org_id : null;
+  } catch {
+    return null;
+  }
+}
 
 export type DashboardStats = {
   users_count: number;
@@ -1848,10 +1863,11 @@ function humanApiError(body: ApiError, status: number): string {
     const first = body.detail[0]?.msg;
     if (typeof first === "string" && first.trim()) return first.trim();
   }
-  if (status === 401) return "Invalid email or password";
+  if (status === 401) return "Your session expired. Please sign in again.";
   if (status === 403) return "You do not have permission to do that";
   if (status === 404) return "Not found";
   if (status === 429) return "Too many requests. Please try again later.";
+  if (status === 402) return body.message || "Plan limit reached. Upgrade to continue.";
   if (status >= 500) return "Something went wrong. Please try again.";
   return "Request failed. Please try again.";
 }
@@ -1860,6 +1876,7 @@ class ApiClient {
   private accessToken: string | null = null;
   private refreshToken: string | null = null;
   private organizationId: string | null = null;
+  private refreshPromise: Promise<boolean> | null = null;
 
   hydrateFromStorage() {
     if (typeof window === "undefined") return;
@@ -1875,14 +1892,18 @@ class ApiClient {
   }) {
     this.accessToken = tokens.access_token;
     this.refreshToken = tokens.refresh_token;
-    if (tokens.organization_id) {
-      this.organizationId = tokens.organization_id;
+    const orgId =
+      tokens.organization_id ||
+      orgIdFromAccessToken(tokens.access_token) ||
+      this.organizationId;
+    if (orgId) {
+      this.organizationId = orgId;
     }
     if (typeof window !== "undefined") {
       localStorage.setItem("if_access_token", tokens.access_token);
       localStorage.setItem("if_refresh_token", tokens.refresh_token);
-      if (tokens.organization_id) {
-        localStorage.setItem("if_organization_id", tokens.organization_id);
+      if (orgId) {
+        localStorage.setItem("if_organization_id", orgId);
       }
     }
   }
@@ -1891,6 +1912,7 @@ class ApiClient {
     this.accessToken = null;
     this.refreshToken = null;
     this.organizationId = null;
+    this.refreshPromise = null;
     if (typeof window !== "undefined") {
       localStorage.removeItem("if_access_token");
       localStorage.removeItem("if_refresh_token");
@@ -1925,8 +1947,13 @@ class ApiClient {
       });
 
       if (res.status === 401 && retry && this.refreshToken) {
+        const refreshBefore = this.refreshToken;
         const refreshed = await this.refresh();
         if (refreshed) {
+          return this.request<T>(path, options, false);
+        }
+        // Another request may have rotated the refresh token successfully.
+        if (this.refreshToken && this.refreshToken !== refreshBefore) {
           return this.request<T>(path, options, false);
         }
         this.clearSession();
@@ -1961,21 +1988,30 @@ class ApiClient {
   }
 
   async refresh(): Promise<boolean> {
+    if (this.refreshPromise) return this.refreshPromise;
+    this.refreshPromise = this.performRefresh().finally(() => {
+      this.refreshPromise = null;
+    });
+    return this.refreshPromise;
+  }
+
+  private async performRefresh(): Promise<boolean> {
+    this.hydrateFromStorage();
     if (!this.refreshToken) return false;
     try {
-      const data = await fetch(`${API_V1}/auth/refresh`, {
+      const res = await fetch(`${API_V1}/auth/refresh`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ refresh_token: this.refreshToken }),
-      }).then(async (res) => {
-        if (!res.ok) return null;
-        return res.json() as Promise<TokenResponse>;
       });
-      if (!data?.access_token) return false;
+      if (!res.ok) return false;
+      const data = (await res.json()) as TokenResponse;
+      if (!data?.access_token || !data?.refresh_token) return false;
       this.setSession({
         access_token: data.access_token,
         refresh_token: data.refresh_token,
-        organization_id: data.user.primary_organization_id,
+        organization_id:
+          data.organization_id ?? data.user?.primary_organization_id ?? null,
       });
       return true;
     } catch {

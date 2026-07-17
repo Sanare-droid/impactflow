@@ -74,6 +74,7 @@ class TokenResponse(BaseModel):
     expires_in: int
     mfa_required: bool = False
     user: "UserBrief"
+    organization_id: Optional[UUID] = None
 
 
 class RefreshRequest(BaseModel):

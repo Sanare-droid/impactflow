@@ -60,7 +60,8 @@ export default function LoginPage() {
       api.setSession({
         access_token: tokens.access_token,
         refresh_token: tokens.refresh_token,
-        organization_id: tokens.user.primary_organization_id,
+        organization_id:
+          tokens.organization_id ?? tokens.user.primary_organization_id,
       });
       setUser(tokens.user);
       if (tokens.user.must_change_password) {
