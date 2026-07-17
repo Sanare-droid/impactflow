@@ -12,10 +12,10 @@ const NAV = [
 ];
 
 const PRICING_TEASER = [
-  { name: "Free Trial", blurb: "14 days · surveys, mobile, basic dashboards" },
-  { name: "Starter", blurb: "KES 7,500/mo · field teams & basic AI" },
-  { name: "Professional", blurb: "KES 20,000/mo · AI, workflows, white-label" },
-  { name: "Enterprise", blurb: "KES 60,000/mo · unlimited scale & SSO" },
+  { name: "Community", blurb: "14-day free trial · 5 users · 2 projects" },
+  { name: "Starter", blurb: "KES 9,900/mo · 10 users, surveys & offline mobile" },
+  { name: "Professional", blurb: "KES 24,900/mo · AI, automation, white-label" },
+  { name: "Enterprise", blurb: "KES 79,900/mo · unlimited users & SSO" },
 ];
 
 const FOCUS = [
@@ -355,7 +355,7 @@ export default function HomePage() {
                 Simple plans that grow with your programs
               </h2>
               <p className="mt-4 text-[#5A534B]">
-                Every workspace starts with a <strong>14-day Free Trial</strong>. Upgrade with
+                Every workspace starts with a <strong>14-day free Community trial</strong>. Upgrade with
                 Paystack when you need AI, workflows, or white-label — prices in KES from the
                 live catalog.
               </p>

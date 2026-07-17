@@ -6,10 +6,22 @@ import { useQuery } from "@tanstack/react-query";
 import { api, type SubscriptionPlan } from "@/lib/api";
 import { BrandLogo } from "@/components/brand-logo";
 
+const IMPLEMENTATION_SERVICES = [
+  { name: "Onboarding", price: "KES 30,000" },
+  { name: "Training", price: "KES 50,000" },
+  { name: "Data migration", price: "KES 100,000+" },
+  { name: "Custom forms / workflows", price: "Quote" },
+  { name: "API integrations", price: "Quote" },
+];
+
 const FAQ = [
   {
     q: "How does the free trial work?",
-    a: "Register your organization and you automatically receive a 14-day Free Trial with surveys, mobile offline capture, and basic dashboards. No credit card required.",
+    a: "Register your organization and you automatically receive a 14-day Community trial with surveys, mobile offline capture, and basic dashboards. No credit card required.",
+  },
+  {
+    q: "What are implementation fees?",
+    a: "One-time services like onboarding, training, and data migration, billed separately from your subscription. Most useful for larger organizations — contact us for a scoped quote.",
   },
   {
     q: "Can we pay in Kenya Shillings?",
@@ -164,7 +176,7 @@ export default function PricingPage() {
                   >
                     {recommended && (
                       <span className="absolute -top-3 left-5 rounded-full bg-[#2F5D3A] px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-white">
-                        Recommended
+                        ⭐ Most popular
                       </span>
                     )}
                     <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#5C6B4A]">
@@ -266,6 +278,40 @@ export default function PricingPage() {
               </tbody>
             </table>
           </div>
+        </section>
+
+        <section className="mx-auto max-w-6xl px-5 py-16 md:px-8">
+          <h2 className="font-display text-3xl font-semibold text-[#16324F]">
+            Implementation services
+          </h2>
+          <p className="mt-3 max-w-2xl text-[#5A534B]">
+            One-time services to get your organization live faster. Billed separately from your
+            subscription — especially valuable for larger organizations and government programs.
+          </p>
+          <div className="mt-8 max-w-2xl overflow-x-auto">
+            <table className="min-w-full border-collapse text-sm">
+              <thead>
+                <tr className="border-b border-[#E8E2D6] text-left">
+                  <th className="py-3 pr-4 font-semibold text-[#16324F]">Service</th>
+                  <th className="py-3 font-semibold text-[#16324F]">Price (one-time)</th>
+                </tr>
+              </thead>
+              <tbody>
+                {IMPLEMENTATION_SERVICES.map((s) => (
+                  <tr key={s.name} className="border-b border-[#F0EBE3]">
+                    <td className="py-3 pr-4 text-[#5A534B]">{s.name}</td>
+                    <td className="py-3 text-[#3F3A34]">{s.price}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <a
+            href="mailto:chris@impactflow.space?subject=ImpactFlow%20implementation%20services"
+            className="mt-6 inline-flex rounded-md border border-[#1B2A4A] px-4 py-2.5 text-sm font-semibold text-[#1B2A4A] hover:bg-[#F7F4EC]"
+          >
+            Request a quote
+          </a>
         </section>
 
         <section className="border-y border-[#E8E2D6]/90 bg-[#F7F4EC]/60">

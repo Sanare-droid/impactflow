@@ -109,7 +109,7 @@ export default function PlatformBillingPage() {
             <option value="enterprise">Enterprise</option>
             <option value="professional">Professional</option>
             <option value="starter">Starter</option>
-            <option value="free">Free Trial</option>
+            <option value="free">Community (free trial)</option>
           </select>
           <Button
             disabled={!orgId.trim() || assign.isPending}
