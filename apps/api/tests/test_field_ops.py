@@ -150,3 +150,30 @@ async def test_field_ops_metrics(client: AsyncClient, org_a: dict):
     body = res.json()
     assert "active_devices" in body
     assert "sync_sessions" in body
+
+
+@pytest.mark.asyncio
+async def test_upload_media_binary_fills_remote_url(client: AsyncClient, org_a: dict):
+    """Real multipart upload should persist bytes and return a fetchable remote_url
+    (S3/MinIO when configured, local filesystem fallback otherwise) — not a stub."""
+    headers = auth_headers(org_a["access_token"], org_a["organization_id"])
+    res = await client.post(
+        "/api/v1/media/uploads/binary",
+        headers=headers,
+        data={
+            "client_mutation_id": f"media-{uuid4().hex}",
+            "entity_type": "survey_response",
+        },
+        files={"file": ("photo.jpg", b"fake-jpeg-bytes", "image/jpeg")},
+    )
+    assert res.status_code == 201, res.text
+    body = res.json()
+    assert body["status"] == "uploaded"
+    assert body["remote_url"]
+    assert body["file_name"] == "photo.jpg"
+    assert body["mime_type"] == "image/jpeg"
+
+    # Listed back under the org's media uploads.
+    listed = await client.get("/api/v1/media/uploads", headers=headers)
+    assert listed.status_code == 200
+    assert any(item["id"] == body["id"] for item in listed.json()["items"])

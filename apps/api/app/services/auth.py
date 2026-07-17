@@ -1152,3 +1152,41 @@ async def complete_sso_login(
         "user": user,
         "organization": org,
     }
+
+
+async def list_my_organizations(db: AsyncSession, user_id: UUID) -> list[dict]:
+    """All active organization memberships for a user — powers the mobile org picker.
+
+    The access token's permissions are re-derived per request from the
+    ``X-Organization-Id`` header (see ``get_current_context``), so switching
+    organizations never requires a new token — clients just need this list to
+    let the user pick which one to send.
+    """
+    result = await db.execute(
+        select(OrganizationMembership)
+        .options(
+            selectinload(OrganizationMembership.organization),
+            selectinload(OrganizationMembership.role),
+        )
+        .where(
+            OrganizationMembership.user_id == user_id,
+            OrganizationMembership.status == "active",
+        )
+    )
+    memberships = result.scalars().all()
+    user = await db.get(User, user_id)
+    primary_id = user.primary_organization_id if user else None
+    items = [
+        {
+            "id": m.organization_id,
+            "name": m.organization.name if m.organization else "",
+            "slug": m.organization.slug if m.organization else "",
+            "role_name": m.role.name if m.role else None,
+            "role_slug": m.role.slug if m.role else None,
+            "is_primary": m.organization_id == primary_id,
+        }
+        for m in memberships
+        if m.organization and m.organization.is_active
+    ]
+    items.sort(key=lambda i: (not i["is_primary"], i["name"].lower()))
+    return items

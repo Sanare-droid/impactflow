@@ -75,7 +75,7 @@ async def test_feature_flags_resolve(client: AsyncClient, org_a: dict):
 
 
 @pytest.mark.asyncio
-async def test_domains_verify_and_public_host(client: AsyncClient, org_a: dict):
+async def test_domains_verify_and_public_host(client: AsyncClient, org_a: dict, monkeypatch):
     headers = auth_headers(org_a["access_token"], org_a["organization_id"])
     created = await client.post(
         "/api/v1/domains",
@@ -86,6 +86,20 @@ async def test_domains_verify_and_public_host(client: AsyncClient, org_a: dict):
     domain_id = created.json()["id"]
     assert created.json()["status"] == "pending"
     assert created.json()["verification_token"]
+
+    # Real verification performs a live DNS-over-HTTPS TXT lookup — no record
+    # exists for this fake test domain, so it must stay pending, not "simulate" active.
+    unverified = await client.post(f"/api/v1/domains/{domain_id}/verify", headers=headers)
+    assert unverified.status_code == 200, unverified.text
+    assert unverified.json()["status"] == "pending"
+    assert unverified.json()["last_error"]
+
+    # Mock the DNS layer to prove the plumbing goes active once the record resolves —
+    # this is the only way to exercise the "success" path without real DNS in CI.
+    async def fake_check(name: str, expected: str):
+        return True, expected
+
+    monkeypatch.setattr("app.services.enterprise.check_dns_txt_record", fake_check)
 
     verified = await client.post(f"/api/v1/domains/{domain_id}/verify", headers=headers)
     assert verified.status_code == 200, verified.text

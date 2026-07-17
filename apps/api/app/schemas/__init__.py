@@ -81,6 +81,15 @@ class RefreshRequest(BaseModel):
     refresh_token: str
 
 
+class MyOrganizationItem(BaseModel):
+    id: UUID
+    name: str
+    slug: str
+    role_name: Optional[str] = None
+    role_slug: Optional[str] = None
+    is_primary: bool = False
+
+
 class MFASetupResponse(BaseModel):
     secret: str
     provisioning_uri: str

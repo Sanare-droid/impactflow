@@ -48,6 +48,7 @@ test-results/
 postgres_data/
 redis_data/
 minio_data/
+apps/api/var/
 
 # Logs
 *.log

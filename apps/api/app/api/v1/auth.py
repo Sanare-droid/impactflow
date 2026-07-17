@@ -17,6 +17,7 @@ from app.schemas import (
     MFASetupResponse,
     MFAVerifyRequest,
     MessageResponse,
+    MyOrganizationItem,
     RefreshRequest,
     RegisterOrganizationRequest,
     ResetPasswordRequest,
@@ -149,6 +150,19 @@ async def me(
     if ctx.auth_method == "api_key":
         raise ForbiddenError("API keys cannot use /auth/me")
     return UserResponse.model_validate(ctx.user)
+
+
+@router.get("/my-organizations", response_model=list[MyOrganizationItem])
+async def my_organizations(
+    ctx: Annotated[RequestContext, Depends(get_current_context)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> list[MyOrganizationItem]:
+    """List every organization the current user can access — used to drive an
+    org picker on login (mobile) without minting a new token per switch."""
+    if ctx.auth_method == "api_key":
+        raise ForbiddenError("API keys cannot list organizations")
+    items = await auth_service.list_my_organizations(db, ctx.user.id)
+    return [MyOrganizationItem.model_validate(i) for i in items]
 
 
 @router.post("/change-password", response_model=MessageResponse)

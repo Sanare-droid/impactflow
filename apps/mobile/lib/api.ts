@@ -21,6 +21,15 @@ export type Tokens = {
   };
 };
 
+export type MyOrganization = {
+  id: string;
+  name: string;
+  slug: string;
+  role_name?: string | null;
+  role_slug?: string | null;
+  is_primary: boolean;
+};
+
 export type Beneficiary = {
   id: string;
   organization_id?: string;
@@ -344,6 +353,12 @@ class FieldApi {
       },
       false,
     );
+  }
+
+  /** Requires accessToken already set (no X-Organization-Id needed — server
+   * re-derives permissions per-request, so this works before an org is chosen). */
+  myOrganizations() {
+    return this.request<MyOrganization[]>("/auth/my-organizations");
   }
 
   listBeneficiaries(params: { page?: number; updated_after?: string } = {}) {

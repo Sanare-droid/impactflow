@@ -634,8 +634,40 @@ async def add_domain(
     return row
 
 
+async def check_dns_txt_record(name: str, expected: str) -> tuple[bool, str]:
+    """Real DNS TXT lookup via DNS-over-HTTPS (no extra resolver dependency needed).
+
+    Tries Cloudflare's DoH endpoint first, falling back to Google's on failure.
+    Returns (matched, detail) where detail is either the matched value or an
+    explanation of why verification failed.
+    """
+    import httpx
+
+    last_error: Optional[str] = None
+    for provider_url in (
+        f"https://cloudflare-dns.com/dns-query?name={name}&type=TXT",
+        f"https://dns.google/resolve?name={name}&type=TXT",
+    ):
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                resp = await client.get(provider_url, headers={"Accept": "application/dns-json"})
+                resp.raise_for_status()
+                data = resp.json()
+            texts: list[str] = []
+            for answer in data.get("Answer") or []:
+                if answer.get("type") == 16 and answer.get("data"):
+                    texts.append(str(answer["data"]).strip('"'))
+            if any(expected in t for t in texts):
+                return True, expected
+            last_error = f"TXT at {name} missing token. Found: {texts[:3] or 'none'}"
+        except Exception as exc:  # noqa: BLE001
+            last_error = str(exc)[:500]
+            continue
+    return False, last_error or "DNS lookup failed"
+
+
 async def verify_domain(
-    db: AsyncSession, organization_id: UUID, domain_id: UUID, *, simulate: bool = False
+    db: AsyncSession, organization_id: UUID, domain_id: UUID
 ) -> OrganizationDomain:
     row = await db.scalar(
         select(OrganizationDomain).where(
@@ -649,40 +681,15 @@ async def verify_domain(
     expected = f"impactflow-domain-verification={row.verification_token}"
     txt_name = f"_impactflow-verify.{row.hostname}"
 
-    if simulate:
+    matched, detail = await check_dns_txt_record(txt_name, expected)
+    if matched:
         row.status = "active"
         row.verified_at = utcnow()
         row.ssl_status = "active"
         row.last_error = None
-        await db.flush()
-        return row
-
-    try:
-        import httpx
-
-        url = f"https://cloudflare-dns.com/dns-query?name={txt_name}&type=TXT"
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            resp = await client.get(url, headers={"Accept": "application/dns-json"})
-            resp.raise_for_status()
-            data = resp.json()
-        texts: list[str] = []
-        for answer in data.get("Answer") or []:
-            if answer.get("type") == 16 and answer.get("data"):
-                texts.append(str(answer["data"]).strip('"'))
-        matched = any(expected in t for t in texts)
-        if matched:
-            row.status = "active"
-            row.verified_at = utcnow()
-            row.ssl_status = "active"
-            row.last_error = None
-        else:
-            row.status = "pending"
-            row.last_error = (
-                f"TXT at {txt_name} missing token. Found: {texts[:3] or 'none'}"
-            )
-    except Exception as exc:  # noqa: BLE001
+    else:
         row.status = "pending"
-        row.last_error = str(exc)[:500]
+        row.last_error = detail[:500]
 
     await db.flush()
     return row

@@ -189,23 +189,44 @@ export default function OrganizationAdminPage() {
           {(domains.data?.items ?? []).map((d) => (
             <div
               key={d.id}
-              className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-stone-200 px-4 py-3 dark:border-stone-800"
+              className="rounded-2xl border border-stone-200 px-4 py-3 dark:border-stone-800"
             >
-              <div>
-                <div className="font-medium">{d.hostname}</div>
-                <div className="text-xs text-stone-500">
-                  TXT verify · SSL {d.ssl_status}
-                  {d.is_primary ? " · primary" : ""}
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <div className="font-medium">{d.hostname}</div>
+                  <div className="text-xs text-stone-500">
+                    TXT verify · SSL {d.ssl_status}
+                    {d.is_primary ? " · primary" : ""}
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <StatusBadge status={d.status} />
+                  {d.status !== "active" && (
+                    <Button
+                      variant="secondary"
+                      disabled={verify.isPending}
+                      onClick={() => verify.mutate(d.id)}
+                    >
+                      {verify.isPending ? "Checking…" : "Verify"}
+                    </Button>
+                  )}
                 </div>
               </div>
-              <div className="flex items-center gap-2">
-                <StatusBadge status={d.status} />
-                {d.status !== "active" && (
-                  <Button variant="secondary" onClick={() => verify.mutate(d.id)}>
-                    Verify
-                  </Button>
-                )}
-              </div>
+              {d.status !== "active" && (
+                <div className="mt-3 space-y-2 rounded-xl bg-stone-50 p-3 text-xs dark:bg-stone-900">
+                  <p className="text-stone-500">
+                    Add this DNS record at your registrar, then click Verify:
+                  </p>
+                  {d.dns_records.map((r, i) => (
+                    <div key={i} className="font-mono text-stone-700 dark:text-stone-300">
+                      {r.type} &nbsp; {r.name} &nbsp; → &nbsp; {r.value}
+                    </div>
+                  ))}
+                  {d.last_error && (
+                    <p className="text-rose-600">Last check: {d.last_error}</p>
+                  )}
+                </div>
+              )}
             </div>
           ))}
         </div>

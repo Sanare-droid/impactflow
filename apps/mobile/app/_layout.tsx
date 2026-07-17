@@ -7,7 +7,7 @@ import { AuthProvider, useAuth } from "@/lib/auth/AuthContext";
 import { SyncProvider } from "@/lib/sync/SyncContext";
 
 function RootNavigator() {
-  const { authed, ready } = useAuth();
+  const { authed, ready, orgChoices } = useAuth();
   const segments = useSegments();
   const router = useRouter();
   const { colors, isDark } = useTheme();
@@ -15,12 +15,16 @@ function RootNavigator() {
   useEffect(() => {
     if (!ready) return;
     const inAuth = segments[0] === "(auth)";
-    if (!authed && !inAuth) {
+    if (!authed && orgChoices) {
+      router.replace("/org-picker");
+    } else if (!authed) {
+      // Always resolve to /login when signed out, even from org-picker
+      // (e.g. after "sign in with a different account" clears the pending choice).
       router.replace("/login");
     } else if (authed && inAuth) {
       router.replace("/(tabs)");
     }
-  }, [authed, ready, segments, router]);
+  }, [authed, ready, orgChoices, segments, router]);
 
   return (
     <>

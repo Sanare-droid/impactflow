@@ -547,7 +547,7 @@ async def verify_org_domain(
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> DomainResponse:
     org_id = _require_org(ctx)
-    row = await ent.verify_domain(db, org_id, domain_id, simulate=False)
+    row = await ent.verify_domain(db, org_id, domain_id)
     return DomainResponse.model_validate(row)
 
 

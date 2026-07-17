@@ -156,6 +156,36 @@ async def test_report_export_formats(client: AsyncClient, org_a: dict):
 
 
 @pytest.mark.asyncio
+async def test_report_export_pdf_is_a_real_pdf(client: AsyncClient, org_a: dict):
+    """format=pdf must return an actual application/pdf binary, not HTML disguised as PDF."""
+    headers = auth_headers(org_a["access_token"], org_a["organization_id"])
+    created = await client.post(
+        "/api/v1/reports",
+        headers=headers,
+        json={
+            "name": "PDF Export Test",
+            "report_type": "progress",
+            "summary": "Summary",
+            "content": "# Hello\n\nGrounded content.",
+        },
+    )
+    assert created.status_code == 201, created.text
+    report_id = created.json()["id"]
+
+    res = await client.get(
+        f"/api/v1/reports/{report_id}/export/download",
+        headers=headers,
+        params={"format": "pdf"},
+    )
+    assert res.status_code == 200, res.text
+    assert res.headers.get("content-type", "").startswith("application/pdf")
+    assert res.content[:5] == b"%PDF-"
+    cd = res.headers.get("content-disposition", "")
+    assert cd.endswith('.pdf"')
+    assert ".pdf.html" not in cd
+
+
+@pytest.mark.asyncio
 async def test_executive_brief(client: AsyncClient, org_a: dict):
     headers = auth_headers(org_a["access_token"], org_a["organization_id"])
     res = await client.post(

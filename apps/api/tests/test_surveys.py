@@ -238,3 +238,37 @@ async def test_list_surveys_updated_after_filter(client: AsyncClient, org_a: dic
     ids = {item["id"] for item in filtered.json()["items"]}
     assert newer.json()["id"] in ids
     assert older.json()["id"] not in ids
+
+
+@pytest.mark.asyncio
+async def test_survey_export_pdf_is_a_real_pdf(client: AsyncClient, org_a: dict):
+    """format=pdf on the responses export must return an actual PDF binary."""
+    headers = auth_headers(org_a["access_token"], org_a["organization_id"])
+    created = await client.post(
+        "/api/v1/surveys",
+        headers=headers,
+        json={
+            "name": "PDF export survey",
+            "schema": {"fields": [{"id": "hh_size", "label": "Household size", "type": "number"}]},
+        },
+    )
+    assert created.status_code == 201, created.text
+    survey_id = created.json()["id"]
+    await client.patch(f"/api/v1/surveys/{survey_id}", headers=headers, json={"publish": True})
+    await client.post(
+        f"/api/v1/surveys/{survey_id}/responses",
+        headers=headers,
+        json={"answers": {"hh_size": 4}, "status": "submitted"},
+    )
+
+    res = await client.get(
+        f"/api/v1/surveys/{survey_id}/export",
+        headers=headers,
+        params={"format": "pdf"},
+    )
+    assert res.status_code == 200, res.text
+    assert res.headers.get("content-type", "").startswith("application/pdf")
+    assert res.content[:5] == b"%PDF-"
+    cd = res.headers.get("content-disposition", "")
+    assert cd.endswith('.pdf"')
+    assert ".pdf.html" not in cd
