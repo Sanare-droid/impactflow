@@ -549,6 +549,12 @@ export default function HomePage() {
                 {item.label}
               </a>
             ))}
+            <Link href="/privacy" className="hover:text-[#16324F]">
+              Privacy
+            </Link>
+            <Link href="/terms" className="hover:text-[#16324F]">
+              Terms
+            </Link>
             <Link href="/login" className="hover:text-[#16324F]">
               Sign in
             </Link>

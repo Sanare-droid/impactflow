@@ -169,6 +169,17 @@ export default function RegisterPage() {
             Sign in
           </Link>
         </p>
+        <p className="mt-3 text-xs text-stone-400">
+          By creating a workspace you agree to our{" "}
+          <Link className="underline hover:text-stone-600" href="/terms">
+            Terms
+          </Link>{" "}
+          and{" "}
+          <Link className="underline hover:text-stone-600" href="/privacy">
+            Privacy Policy
+          </Link>
+          .
+        </p>
       </Card>
     </div>
   );

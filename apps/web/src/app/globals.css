@@ -105,3 +105,19 @@ body {
   left: 1rem;
   top: 1rem;
 }
+
+@media print {
+  .no-print {
+    display: none !important;
+  }
+
+  body {
+    background: #fff !important;
+    color: #111 !important;
+  }
+
+  .privacy-print section {
+    break-inside: avoid;
+    box-shadow: none !important;
+  }
+}
