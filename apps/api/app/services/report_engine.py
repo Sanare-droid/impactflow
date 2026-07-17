@@ -440,11 +440,17 @@ def _csv_bytes(report: Report) -> bytes:
     w.writerow(["period_end", report.period_end or ""])
     w.writerow(["summary", report.summary or ""])
     w.writerow(["content", report.content or ""])
+    for raw in report.sections or []:
+        if not isinstance(raw, dict):
+            continue
+        title = str(raw.get("title") or raw.get("id") or "section")
+        body = raw.get("body") or raw.get("content") or raw.get("text") or ""
+        w.writerow([f"section:{title}", body if isinstance(body, str) else ""])
     return buf.getvalue().encode("utf-8")
 
 
 def _xlsx_xml(report: Report) -> bytes:
-    """SpreadsheetML (Excel-compatible XML) — same approach as survey exports."""
+    """SpreadsheetML (Excel-compatible XML) — open as .xls."""
     rows = [
         ("Name", report.name),
         ("Code", report.code),
@@ -455,6 +461,12 @@ def _xlsx_xml(report: Report) -> bytes:
         ("Summary", report.summary or ""),
         ("Content", (report.content or "")[:32000]),
     ]
+    for raw in report.sections or []:
+        if not isinstance(raw, dict):
+            continue
+        title = str(raw.get("title") or raw.get("id") or "Section")
+        body = raw.get("body") or raw.get("content") or raw.get("text") or ""
+        rows.append((f"Section: {title}", body if isinstance(body, str) else ""))
     cells = []
     for i, (k, v) in enumerate(rows, start=1):
         cells.append(

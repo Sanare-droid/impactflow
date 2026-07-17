@@ -3741,8 +3741,12 @@ class ApiClient {
     if (!res.ok) throw new Error("Export download failed");
     const blob = await res.blob();
     const cd = res.headers.get("Content-Disposition");
-    const match = cd?.match(/filename="?([^"]+)"?/i);
-    const name = filename ?? match?.[1] ?? `report.${format === "markdown" ? "md" : format}`;
+    const match = cd?.match(/filename\*?=(?:UTF-8''|")?([^\";]+)"?/i);
+    const headerName = match?.[1] ? decodeURIComponent(match[1]) : null;
+    const name =
+      filename ??
+      headerName ??
+      `report.${format === "markdown" ? "md" : format === "xlsx" ? "xls" : format}`;
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;

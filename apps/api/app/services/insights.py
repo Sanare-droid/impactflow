@@ -63,6 +63,31 @@ async def get_report(db: AsyncSession, organization_id: UUID, report_id: UUID) -
     return report
 
 
+def render_report_sections_markdown(sections: list | None) -> list[str]:
+    """Turn stored template/report section outlines into markdown headings + placeholders."""
+    if not sections:
+        return []
+    lines: list[str] = ["## Report outline", ""]
+    for raw in sections:
+        if not isinstance(raw, dict):
+            continue
+        title = str(raw.get("title") or raw.get("id") or "Section").strip() or "Section"
+        body = raw.get("body") or raw.get("content") or raw.get("text")
+        required = raw.get("required")
+        suffix = " *(required)*" if required else ""
+        lines.extend([f"### {title}{suffix}", ""])
+        if isinstance(body, str) and body.strip():
+            lines.extend([body.strip(), ""])
+        else:
+            lines.extend(
+                [
+                    "_Add narrative, indicators, and evidence for this section._",
+                    "",
+                ]
+            )
+    return lines
+
+
 def render_report_markdown(report: Report) -> str:
     lines = [
         f"# {report.name}",
@@ -80,8 +105,40 @@ def render_report_markdown(report: Report) -> str:
         lines.extend(["## Summary", "", report.summary, ""])
     if report.content:
         lines.extend(["## Content", "", report.content, ""])
+    section_lines = render_report_sections_markdown(
+        list(report.sections or []) if hasattr(report, "sections") else []
+    )
+    # Sections already appear inside seeded/AI content when present; only
+    # emit the outline when content is empty so exports are never blank.
+    if section_lines and not (report.content or "").strip():
+        lines.extend(section_lines)
     lines.append(f"_Exported from ImpactFlow · {report.code}_")
     return "\n".join(lines)
+
+
+def seed_content_from_sections(sections: list | None, *, report_name: str) -> tuple[str, str]:
+    """Build draft summary + content from template sections when AI narrative is off."""
+    outline = render_report_sections_markdown(sections)
+    if not outline:
+        summary = f"Draft report outline for {report_name}."
+        content = (
+            f"# {report_name}\n\n"
+            "_No template sections were selected. Add content before exporting._\n"
+        )
+        return summary, content
+    content = "\n".join([f"# {report_name}", ""] + outline)
+    titles = [
+        str(s.get("title") or s.get("id") or "Section")
+        for s in (sections or [])
+        if isinstance(s, dict)
+    ]
+    summary = (
+        f"Draft built from template outline ({len(titles)} sections): "
+        + ", ".join(titles[:6])
+        + ("…" if len(titles) > 6 else "")
+        + "."
+    )
+    return summary, content
 
 
 async def list_reports(

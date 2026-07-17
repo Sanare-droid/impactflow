@@ -91,6 +91,45 @@ async def test_report_templates_clone_and_build(client: AsyncClient, org_a: dict
 
 
 @pytest.mark.asyncio
+async def test_template_build_export_includes_sections(client: AsyncClient, org_a: dict):
+    """Template builds without AI must still export a non-empty outline."""
+    headers = auth_headers(org_a["access_token"], org_a["organization_id"])
+    built = await client.post(
+        "/api/v1/reports/build",
+        headers=headers,
+        json={
+            "name": "Outline Only Donor Report",
+            "template_code": "usaid-style",
+            "generate_narrative": False,
+            "save_version": False,
+        },
+    )
+    assert built.status_code == 201, built.text
+    body = built.json()
+    assert body["sections"]
+    assert body["content"]
+    assert "Executive Summary" in (body["content"] or "")
+
+    report_id = body["id"]
+    for fmt in ("markdown", "html", "docx", "csv", "xlsx"):
+        res = await client.get(
+            f"/api/v1/reports/{report_id}/export/download",
+            headers=headers,
+            params={"format": fmt},
+        )
+        assert res.status_code == 200, f"{fmt}: {res.text}"
+        assert len(res.content) > 100
+        if fmt == "markdown":
+            text = res.content.decode("utf-8")
+            assert "Executive Summary" in text
+            assert "Intermediate Results" in text
+        if fmt == "xlsx":
+            # SpreadsheetML — Content-Disposition should use .xls
+            cd = res.headers.get("content-disposition", "")
+            assert ".xls" in cd or "excel" in (res.headers.get("content-type") or "").lower()
+
+
+@pytest.mark.asyncio
 async def test_report_export_formats(client: AsyncClient, org_a: dict):
     headers = auth_headers(org_a["access_token"], org_a["organization_id"])
     created = await client.post(

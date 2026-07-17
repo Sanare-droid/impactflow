@@ -20,7 +20,8 @@ const EXPORT_FORMATS: { format: ReportExportFormat; label: string; ext: string }
   { format: "html", label: "HTML", ext: "html" },
   { format: "docx", label: "DOCX", ext: "docx" },
   { format: "pptx", label: "PPTX", ext: "pptx" },
-  { format: "xlsx", label: "XLSX", ext: "xlsx" },
+  // Backend serves SpreadsheetML — must use .xls so Excel opens content
+  { format: "xlsx", label: "Excel", ext: "xls" },
   { format: "csv", label: "CSV", ext: "csv" },
 ];
 

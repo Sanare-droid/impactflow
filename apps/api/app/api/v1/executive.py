@@ -309,6 +309,10 @@ async def build_report(
         )
         content = generated.get("content")
         summary = (content or "")[:500]
+    elif sections:
+        summary, content = insights_service.seed_content_from_sections(
+            sections, report_name=body.name
+        )
 
     report = await insights_service.create_report(
         db,
