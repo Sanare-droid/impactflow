@@ -50,7 +50,7 @@ export function SurveyAssignments({ survey }: { survey: Survey }) {
   });
   const beneficiaries = useQuery({
     queryKey: ["beneficiaries-picker"],
-    queryFn: () => api.listBeneficiaries({ page: 1 }),
+    queryFn: () => api.listBeneficiaries(),
     enabled: targetType === "beneficiary",
   });
   const communities = useQuery({

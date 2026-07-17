@@ -197,11 +197,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     queryFn: () => api.getFeatures(),
     staleTime: 60_000,
   });
-  const features = featuresPayload?.features ?? {};
   const isPlatformAdmin = Boolean(user?.is_platform_admin || user?.is_superuser);
   const unreadCount = unread?.unread_count ?? 0;
 
   const visibleGroups = useMemo(() => {
+    const features = featuresPayload?.features ?? {};
     return navGroups
       .map((group) => ({
         ...group,
@@ -213,7 +213,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         }),
       }))
       .filter((g) => g.items.length > 0);
-  }, [features, isPlatformAdmin]);
+  }, [featuresPayload?.features, isPlatformAdmin]);
 
   return (
     <div className="min-h-screen bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-teal-50 via-stone-50 to-stone-100 dark:from-stone-950 dark:via-stone-950 dark:to-teal-950/40">
