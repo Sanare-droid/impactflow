@@ -180,6 +180,36 @@ export type SyncRunResponse = {
 
 type Paginated<T> = { items: T[]; meta: { total: number; page: number; page_size: number } };
 
+type ApiErrorBody = {
+  message?: string;
+  code?: string;
+  details?: unknown;
+  detail?: string | { message?: string } | Array<{ msg?: string }>;
+};
+
+function humanApiError(body: ApiErrorBody, status: number): string {
+  if (typeof body.message === "string" && body.message.trim()) {
+    return body.message.trim();
+  }
+  if (typeof body.detail === "string" && body.detail.trim()) {
+    return body.detail.trim();
+  }
+  if (body.detail && typeof body.detail === "object" && !Array.isArray(body.detail)) {
+    const nested = body.detail.message;
+    if (typeof nested === "string" && nested.trim()) return nested.trim();
+  }
+  if (Array.isArray(body.detail) && body.detail.length > 0) {
+    const first = body.detail[0]?.msg;
+    if (typeof first === "string" && first.trim()) return first.trim();
+  }
+  if (status === 401) return "Invalid email or password";
+  if (status === 403) return "You do not have permission to do that";
+  if (status === 404) return "Not found";
+  if (status === 429) return "Too many requests. Please try again later.";
+  if (status >= 500) return "Something went wrong. Please try again.";
+  return "Request failed. Please try again.";
+}
+
 class FieldApi {
   accessToken: string | null = null;
   refreshToken: string | null = null;
@@ -211,7 +241,9 @@ class FieldApi {
     if (this.accessToken) headers.set("Authorization", `Bearer ${this.accessToken}`);
     if (this.organizationId) headers.set("X-Organization-Id", this.organizationId);
 
-    const res = await fetch(`${API_V1}${path}`, { ...options, headers });
+    const res = await fetch(`${API_V1}${path}`, { ...options, headers }).catch(() => {
+      throw new Error("Unable to reach the server. Check your connection and try again.");
+    });
 
     if (res.status === 401 && retry && this.refreshToken) {
       const ok = await this.refresh();
@@ -220,12 +252,8 @@ class FieldApi {
     }
 
     if (!res.ok) {
-      const body = await res.json().catch(() => ({}));
-      const message =
-        body.message ||
-        (typeof body.detail === "string" ? body.detail : null) ||
-        `Request failed (${res.status})`;
-      throw new Error(message);
+      const body = (await res.json().catch(() => ({}))) as ApiErrorBody;
+      throw new Error(humanApiError(body, res.status));
     }
     if (res.status === 204) return undefined as T;
     return res.json();
@@ -259,10 +287,14 @@ class FieldApi {
   }
 
   login(email: string, password: string) {
-    return this.request<Tokens>("/auth/login", {
-      method: "POST",
-      body: JSON.stringify({ email, password }),
-    });
+    return this.request<Tokens>(
+      "/auth/login",
+      {
+        method: "POST",
+        body: JSON.stringify({ email, password }),
+      },
+      false,
+    );
   }
 
   listBeneficiaries(params: { page?: number; updated_after?: string } = {}) {

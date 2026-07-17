@@ -1813,7 +1813,31 @@ type ApiError = {
   message?: string;
   code?: string;
   details?: Record<string, unknown>;
+  detail?: string | { message?: string; code?: string } | Array<{ msg?: string }>;
 };
+
+function humanApiError(body: ApiError, status: number): string {
+  if (typeof body.message === "string" && body.message.trim()) {
+    return body.message.trim();
+  }
+  if (typeof body.detail === "string" && body.detail.trim()) {
+    return body.detail.trim();
+  }
+  if (body.detail && typeof body.detail === "object" && !Array.isArray(body.detail)) {
+    const nested = body.detail.message;
+    if (typeof nested === "string" && nested.trim()) return nested.trim();
+  }
+  if (Array.isArray(body.detail) && body.detail.length > 0) {
+    const first = body.detail[0]?.msg;
+    if (typeof first === "string" && first.trim()) return first.trim();
+  }
+  if (status === 401) return "Invalid email or password";
+  if (status === 403) return "You do not have permission to do that";
+  if (status === 404) return "Not found";
+  if (status === 429) return "Too many requests. Please try again later.";
+  if (status >= 500) return "Something went wrong. Please try again.";
+  return "Request failed. Please try again.";
+}
 
 class ApiClient {
   private accessToken: string | null = null;
@@ -1892,13 +1916,13 @@ class ApiClient {
       }
 
       if (!res.ok) {
-        let error: ApiError = { message: res.statusText };
+        let error: ApiError = {};
         try {
           error = await res.json();
         } catch {
           /* ignore */
         }
-        throw new Error(error.message || "Request failed");
+        throw new Error(humanApiError(error, res.status));
       }
 
       if (res.status === 204) {
@@ -1912,7 +1936,7 @@ class ApiClient {
         /failed to fetch|networkerror|load failed|network request failed/i.test(msg);
       if (unreachable) {
         throw new Error(
-          `Cannot reach the API at ${API_URL}. Set NEXT_PUBLIC_API_URL on Netlify to your Railway API URL, and ensure BACKEND_CORS_ORIGINS includes this site.`,
+          "Unable to reach the server. Check your connection and try again.",
         );
       }
       throw err;
@@ -1943,17 +1967,25 @@ class ApiClient {
   }
 
   register(body: Record<string, unknown>) {
-    return this.request<TokenResponse>("/auth/register", {
-      method: "POST",
-      body: JSON.stringify(body),
-    });
+    return this.request<TokenResponse>(
+      "/auth/register",
+      {
+        method: "POST",
+        body: JSON.stringify(body),
+      },
+      false,
+    );
   }
 
   login(body: Record<string, unknown>) {
-    return this.request<TokenResponse>("/auth/login", {
-      method: "POST",
-      body: JSON.stringify(body),
-    });
+    return this.request<TokenResponse>(
+      "/auth/login",
+      {
+        method: "POST",
+        body: JSON.stringify(body),
+      },
+      false,
+    );
   }
 
   logout() {
@@ -2917,15 +2949,14 @@ class ApiClient {
     return fetch(`${API_V1}/public/billing/plans`)
       .then(async (res) => {
         if (!res.ok) {
-          const text = await res.text();
-          throw new Error(text || `HTTP ${res.status}`);
+          throw new Error("Unable to load pricing. Please try again.");
         }
         return res.json() as Promise<Paginated<SubscriptionPlan>>;
       })
       .catch((err: unknown) => {
         if (err instanceof TypeError) {
           throw new Error(
-            `Cannot reach API at ${API_URL}. Check NEXT_PUBLIC_API_URL.`,
+            "Unable to reach the server. Check your connection and try again.",
           );
         }
         throw err;

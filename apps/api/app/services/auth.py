@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+import logging
 import re
 import secrets
 import string
@@ -42,6 +44,27 @@ from app.models.refresh_token import RefreshToken
 from app.models.role import Role
 from app.models.user import User
 from app.services.audit import write_audit_log
+
+logger = logging.getLogger(__name__)
+
+
+async def _send_registration_emails(
+    *,
+    email: str,
+    org_name: str,
+    verify_url: str,
+) -> None:
+    """Best-effort welcome + verify emails — never blocks signup."""
+    from app.services import billing_emails
+
+    try:
+        await billing_emails.trial_started(email, org_name=org_name, days=14)
+    except Exception:  # noqa: BLE001
+        logger.exception("registration.trial_email_failed to=%s", email)
+    try:
+        await billing_emails.email_verification(email, verify_url=verify_url)
+    except Exception:  # noqa: BLE001
+        logger.exception("registration.verify_email_failed to=%s", email)
 
 
 def slugify(value: str) -> str:
@@ -249,19 +272,26 @@ async def register_organization(
     )
 
     # Provision Free Trial subscription + branding + onboarding
-    from app.services import billing_emails
     from app.services import enterprise as ent
     from app.services import platform as platform_service
 
     await ent.get_or_create_subscription(db, org.id, plan_code="free")
     await platform_service.get_branding(db, org.id)
     await ent.get_or_create_onboarding(db, org.id)
-    await billing_emails.trial_started(user.email, org_name=org.name, days=14)
 
     verify_token = create_email_verify_token(user.id)
     frontend = (settings.frontend_url or "").rstrip("/")
     verify_url = f"{frontend}/verify-email?token={verify_token}"
-    await billing_emails.email_verification(user.email, verify_url=verify_url)
+
+    # Commit before emails so signup is not held open by Resend/SMTP (up to 30s each).
+    await db.commit()
+    asyncio.create_task(
+        _send_registration_emails(
+            email=user.email,
+            org_name=org.name,
+            verify_url=verify_url,
+        )
+    )
 
     return org, user, access, refresh
 

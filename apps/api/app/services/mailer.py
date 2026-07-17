@@ -100,7 +100,7 @@ async def _send_resend(
     if html:
         payload["html"] = html
 
-    async with httpx.AsyncClient(timeout=30.0) as client:
+    async with httpx.AsyncClient(timeout=10.0) as client:
         response = await client.post(
             "https://api.resend.com/emails",
             headers={
@@ -140,12 +140,12 @@ async def _send_smtp(
         # 465 / 2465 = implicit SSL; 587 / 2587 = STARTTLS
         use_ssl = port in {465, 2465}
         if use_ssl:
-            with smtplib.SMTP_SSL(host, port, timeout=30) as server:
+            with smtplib.SMTP_SSL(host, port, timeout=10) as server:
                 if user:
                     server.login(user, password)
                 server.send_message(msg)
         elif settings.smtp_use_tls:
-            with smtplib.SMTP(host, port, timeout=30) as server:
+            with smtplib.SMTP(host, port, timeout=10) as server:
                 server.ehlo()
                 server.starttls()
                 server.ehlo()
@@ -153,7 +153,7 @@ async def _send_smtp(
                     server.login(user, password)
                 server.send_message(msg)
         else:
-            with smtplib.SMTP(host, port, timeout=30) as server:
+            with smtplib.SMTP(host, port, timeout=10) as server:
                 if user:
                     server.login(user, password)
                 server.send_message(msg)

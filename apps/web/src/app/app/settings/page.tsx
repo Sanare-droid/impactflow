@@ -203,10 +203,7 @@ function SettingsContent() {
         <CardDescription>
           Access tokens expire quickly; refresh tokens rotate on each use.
         </CardDescription>
-        <p className="mt-4 text-sm text-stone-500">
-          Signed in as {user?.email}. API base:{" "}
-          {process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000"}
-        </p>
+        <p className="mt-4 text-sm text-stone-500">Signed in as {user?.email}.</p>
       </Card>
 
       {message && <p className="text-sm text-teal-700">{message}</p>}

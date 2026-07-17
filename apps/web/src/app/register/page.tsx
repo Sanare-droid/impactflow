@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { FormEvent, useState } from "react";
-import { API_URL, api, APP_NAME } from "@/lib/api";
+import { api, APP_NAME } from "@/lib/api";
 import { BrandLogo } from "@/components/brand-logo";
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
@@ -150,11 +150,8 @@ export default function RegisterPage() {
             />
           </div>
           {error && (
-            <div className="md:col-span-2 space-y-1 rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700 dark:bg-rose-950/40 dark:text-rose-300">
+            <div className="md:col-span-2 rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700 dark:bg-rose-950/40 dark:text-rose-300">
               <p>{error}</p>
-              <p className="text-xs opacity-80">
-                API: <code className="break-all">{API_URL}</code>
-              </p>
             </div>
           )}
           <div className="md:col-span-2">
