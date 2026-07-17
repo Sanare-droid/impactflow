@@ -74,7 +74,7 @@ export default function TasksScreen() {
             <EmptyState
               icon={<CheckSquare size={40} color={colors.textMuted} />}
               title="No tasks assigned"
-              description="Tasks assigned to you will appear here after sync. Pull to refresh when online."
+              description="Tasks assigned to you on the web (Projects or Tasks) appear here after sync. Pull to refresh when online."
             />
           }
           renderItem={({ item }) => (

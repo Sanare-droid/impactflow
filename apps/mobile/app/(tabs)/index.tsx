@@ -113,7 +113,7 @@ export default function DashboardScreen() {
           </Text>
           <Text style={[typography.caption, { color: colors.textMuted }]}>Works offline</Text>
         </Card>
-        <Card padding="md" style={styles.actionCard} onPress={() => router.push("/surveys/index")}>
+        <Card padding="md" style={styles.actionCard} onPress={() => router.push("/surveys")}>
             <ClipboardList size={22} color={colors.primary} />
             <Text style={[typography.bodyMedium, { color: colors.text, marginTop: spacing.sm }]}>
               Capture survey

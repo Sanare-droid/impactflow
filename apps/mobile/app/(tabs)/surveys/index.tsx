@@ -55,8 +55,8 @@ export default function SurveysScreen() {
             title="No surveys downloaded"
             description={
               online
-                ? "Pull to refresh and sync published forms for offline capture."
-                : "Connect once to download survey forms for offline use."
+                ? "Published surveys from the web console sync here. Pull to refresh, then open a form to capture responses."
+                : "Connect once to download survey forms your admin published on the web."
             }
           />
         }

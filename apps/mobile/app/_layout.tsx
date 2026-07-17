@@ -18,7 +18,7 @@ function RootNavigator() {
     if (!authed && !inAuth) {
       router.replace("/login");
     } else if (authed && inAuth) {
-      router.replace("/index");
+      router.replace("/(tabs)");
     }
   }, [authed, ready, segments, router]);
 

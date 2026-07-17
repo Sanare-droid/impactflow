@@ -1,5 +1,12 @@
 import { useState } from "react";
-import { KeyboardAvoidingView, Platform, StyleSheet, Text, View } from "react-native";
+import {
+  Image,
+  KeyboardAvoidingView,
+  Platform,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTheme } from "@/theme";
 import { useAuth } from "@/lib/auth/AuthContext";
@@ -29,13 +36,22 @@ export default function LoginScreen() {
 
   return (
     <KeyboardAvoidingView
-      style={[styles.flex, { backgroundColor: colors.background, paddingTop: insets.top }]}
+      style={[
+        styles.flex,
+        {
+          backgroundColor: colors.background,
+          paddingTop: insets.top,
+          paddingBottom: insets.bottom + spacing.md,
+        },
+      ]}
       behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
       <View style={[styles.hero, { paddingHorizontal: spacing.screen }]}>
-        <View style={[styles.logoMark, { backgroundColor: colors.primaryMuted, borderRadius: radius.lg }]}>
-          <Text style={[typography.display, { color: colors.primaryDark, fontSize: 28 }]}>IF</Text>
-        </View>
+        <Image
+          source={require("../../assets/icon.png")}
+          style={[styles.logoMark, { borderRadius: radius.lg }]}
+          accessibilityLabel="ImpactFlow"
+        />
         <Text style={[typography.display, { color: colors.primaryDark, marginTop: spacing.lg }]}>
           ImpactFlow Field
         </Text>
@@ -94,10 +110,16 @@ export default function LoginScreen() {
       <Text
         style={[
           typography.caption,
-          { color: colors.textMuted, textAlign: "center", marginTop: spacing.xl, paddingHorizontal: spacing.screen },
+          {
+            color: colors.textMuted,
+            textAlign: "center",
+            marginTop: spacing.xl,
+            paddingHorizontal: spacing.screen,
+          },
         ]}
       >
-        Your organization admin can invite you from the web console. Data syncs securely when online.
+        Your organization admin can invite you from the web console. Data syncs securely when
+        online.
       </Text>
     </KeyboardAvoidingView>
   );
@@ -107,10 +129,8 @@ const styles = StyleSheet.create({
   flex: { flex: 1 },
   hero: { paddingTop: 48, paddingBottom: 32 },
   logoMark: {
-    width: 64,
-    height: 64,
-    alignItems: "center",
-    justifyContent: "center",
+    width: 72,
+    height: 72,
   },
   card: {},
 });
