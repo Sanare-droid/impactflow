@@ -78,7 +78,7 @@ function ProjectsContent() {
                   <td className="py-6" colSpan={4}>
                     <EmptyState
                       title="No projects yet"
-                      description="Create a program first, then add a project from the program page."
+                      description="Open a program, create a project there, then open the project to assign tasks."
                       actionLabel="Go to programs"
                       actionHref="/app/programs"
                     />

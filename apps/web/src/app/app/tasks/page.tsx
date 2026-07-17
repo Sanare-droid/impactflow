@@ -137,7 +137,7 @@ export default function TasksPage() {
                   <td className="py-6" colSpan={6}>
                     <EmptyState
                       title="No tasks yet"
-                      description="Open a project to create and assign work to field officers."
+                      description="Open a project to create tasks and assign field officers. Tasks only sync to mobile for the assignee."
                       actionLabel="Browse projects"
                       actionHref="/app/projects"
                     />

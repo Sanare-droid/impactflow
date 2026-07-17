@@ -92,7 +92,7 @@ export default function ProgramsPage() {
                 <th className="pb-3 font-medium">Name</th>
                 <th className="pb-3 font-medium">Code</th>
                 <th className="pb-3 font-medium">Status</th>
-                <th className="pb-3 font-medium">Projects</th>
+                <th className="pb-3 font-medium">Open</th>
               </tr>
             </thead>
             <tbody>
@@ -128,9 +128,9 @@ export default function ProgramsPage() {
                   <td className="py-3">
                     <Link
                       className="text-teal-700 hover:underline dark:text-teal-300"
-                      href={`/app/projects?program_id=${program.id}`}
+                      href={`/app/programs/${program.id}`}
                     >
-                      View projects
+                      Open program
                     </Link>
                   </td>
                 </tr>
