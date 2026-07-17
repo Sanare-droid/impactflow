@@ -105,6 +105,23 @@ export type Role = {
   permissions: string[];
 };
 
+export type OrgMembership = {
+  id: string;
+  organization_id: string;
+  user_id: string;
+  role_id: string;
+  status: string;
+  user?: UserBrief | null;
+  role?: Role | null;
+};
+
+export type InviteUserResponse = {
+  user: UserBrief;
+  message: string;
+  email_delivery?: { status?: string; provider?: string };
+  temporary_password?: string;
+};
+
 export type Paginated<T> = {
   items: T[];
   meta: {
@@ -2033,6 +2050,34 @@ class ApiClient {
 
   roles() {
     return this.request<Role[]>("/roles");
+  }
+
+  listUsers(params: { page?: number; page_size?: number } = {}) {
+    const q = new URLSearchParams();
+    q.set("page", String(params.page ?? 1));
+    q.set("page_size", String(params.page_size ?? 100));
+    return this.request<Paginated<OrgMembership>>(`/users?${q}`);
+  }
+
+  inviteUser(body: {
+    email: string;
+    first_name: string;
+    last_name: string;
+    role_id: string;
+    job_title?: string | null;
+    send_invite?: boolean;
+  }) {
+    return this.request<InviteUserResponse>("/users/invite", {
+      method: "POST",
+      body: JSON.stringify(body),
+    });
+  }
+
+  updateMembershipRole(membershipId: string, role_id: string) {
+    return this.request<OrgMembership>(`/users/memberships/${membershipId}`, {
+      method: "PATCH",
+      body: JSON.stringify({ role_id }),
+    });
   }
 
   permissions() {

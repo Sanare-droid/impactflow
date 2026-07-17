@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from typing import Annotated
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy import func, select
@@ -22,6 +23,7 @@ from app.schemas import (
     PaginationMeta,
     PermissionResponse,
     RoleResponse,
+    UpdateMembershipRoleRequest,
     UserBrief,
     UserResponse,
     UserUpdateRequest,
@@ -196,6 +198,72 @@ async def invite_user(
     if temp_password:
         payload["temporary_password"] = temp_password
     return payload
+
+
+def _membership_response(m: OrganizationMembership) -> MembershipResponse:
+    role_perms = [
+        rp.permission.code
+        for rp in (m.role.role_permissions if m.role else [])
+        if rp.permission
+    ]
+    return MembershipResponse(
+        id=m.id,
+        organization_id=m.organization_id,
+        user_id=m.user_id,
+        role_id=m.role_id,
+        status=m.status,
+        user=UserBrief.model_validate(m.user) if m.user else None,
+        role=RoleResponse(
+            id=m.role.id,
+            name=m.role.name,
+            slug=m.role.slug,
+            description=m.role.description,
+            is_system=m.role.is_system,
+            is_default=m.role.is_default,
+            organization_id=m.role.organization_id,
+            permissions=role_perms,
+        )
+        if m.role
+        else None,
+    )
+
+
+@router.patch(
+    "/users/memberships/{membership_id}",
+    response_model=MembershipResponse,
+)
+async def update_membership_role(
+    membership_id: UUID,
+    body: UpdateMembershipRoleRequest,
+    request: Request,
+    ctx: Annotated[RequestContext, Depends(require_permissions("users:manage"))],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> MembershipResponse:
+    if not ctx.organization:
+        raise NotFoundError("No active organization context")
+    ip, ua = client_meta(request)
+    membership = await auth_service.update_membership_role(
+        db,
+        organization_id=ctx.organization.id,
+        membership_id=membership_id,
+        role_id=body.role_id,
+        actor=ctx.user,
+        ip_address=ip,
+        user_agent=ua,
+    )
+    # Reload with permissions for response
+    result = await db.execute(
+        select(OrganizationMembership)
+        .options(
+            selectinload(OrganizationMembership.user),
+            selectinload(OrganizationMembership.role)
+            .selectinload(Role.role_permissions)
+            .selectinload(RolePermission.permission),
+        )
+        .where(OrganizationMembership.id == membership.id)
+    )
+    loaded = result.scalar_one()
+    return _membership_response(loaded)
 
 
 @router.get("/roles", response_model=list[RoleResponse])

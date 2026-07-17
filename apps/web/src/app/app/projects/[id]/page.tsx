@@ -2,13 +2,16 @@
 
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { FormEvent, useState } from "react";
+import { FormEvent, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
 import { Input, Label } from "@/components/ui/input";
 import { StatusBadge } from "@/components/ui/status-badge";
+
+const selectClassName =
+  "mt-1 w-full rounded-xl border border-stone-200 bg-white px-3 py-2 text-sm dark:border-stone-700 dark:bg-stone-950";
 
 export default function ProjectDetailPage() {
   const params = useParams<{ id: string }>();
@@ -18,6 +21,8 @@ export default function ProjectDetailPage() {
   const [activityName, setActivityName] = useState("");
   const [planName, setPlanName] = useState("");
   const [taskTitle, setTaskTitle] = useState("");
+  const [assigneeId, setAssigneeId] = useState("");
+  const [dueDate, setDueDate] = useState("");
   const [error, setError] = useState<string | null>(null);
 
   const { data: project, isLoading } = useQuery({
@@ -40,11 +45,29 @@ export default function ProjectDetailPage() {
     queryFn: () => api.listTasks({ project_id: projectId }),
   });
 
+  const { data: users } = useQuery({
+    queryKey: ["users"],
+    queryFn: () => api.listUsers({ page_size: 100 }),
+  });
+
+  const memberLabel = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const m of users?.items ?? []) {
+      if (!m.user) continue;
+      map.set(
+        m.user_id,
+        `${m.user.first_name} ${m.user.last_name}`.trim() || m.user.email,
+      );
+    }
+    return map;
+  }, [users]);
+
   const invalidate = async () => {
     await Promise.all([
       qc.invalidateQueries({ queryKey: ["activities", projectId] }),
       qc.invalidateQueries({ queryKey: ["work-plans", projectId] }),
       qc.invalidateQueries({ queryKey: ["tasks", projectId] }),
+      qc.invalidateQueries({ queryKey: ["tasks", "all"] }),
       qc.invalidateQueries({ queryKey: ["dashboard-stats"] }),
     ]);
   };
@@ -86,9 +109,13 @@ export default function ProjectDetailPage() {
         title: taskTitle,
         status: "todo",
         priority: "medium",
+        assignee_id: assigneeId || null,
+        due_date: dueDate || null,
       }),
     onSuccess: async () => {
       setTaskTitle("");
+      setAssigneeId("");
+      setDueDate("");
       setError(null);
       await invalidate();
     },
@@ -98,6 +125,13 @@ export default function ProjectDetailPage() {
   const completeTask = useMutation({
     mutationFn: (id: string) => api.updateTask(id, { status: "done" }),
     onSuccess: invalidate,
+  });
+
+  const assignTask = useMutation({
+    mutationFn: ({ id, nextAssignee }: { id: string; nextAssignee: string }) =>
+      api.updateTask(id, { assignee_id: nextAssignee || null }),
+    onSuccess: invalidate,
+    onError: (err: Error) => setError(err.message),
   });
 
   if (isLoading || !project) {
@@ -204,7 +238,9 @@ export default function ProjectDetailPage() {
 
         <Card>
           <CardTitle>Tasks</CardTitle>
-          <CardDescription>Assignable action items.</CardDescription>
+          <CardDescription>
+            Assign to a teammate so the task syncs to their field app.
+          </CardDescription>
           <form
             className="mt-4 space-y-3"
             onSubmit={(e: FormEvent) => {
@@ -221,6 +257,34 @@ export default function ProjectDetailPage() {
                 onChange={(e) => setTaskTitle(e.target.value)}
               />
             </div>
+            <div>
+              <Label htmlFor="assignee">Assignee</Label>
+              <select
+                id="assignee"
+                className={selectClassName}
+                value={assigneeId}
+                onChange={(e) => setAssigneeId(e.target.value)}
+              >
+                <option value="">Unassigned</option>
+                {(users?.items ?? []).map((m) => (
+                  <option key={m.id} value={m.user_id}>
+                    {m.user
+                      ? `${m.user.first_name} ${m.user.last_name}`.trim() || m.user.email
+                      : m.user_id}
+                    {m.role?.slug === "field_officer" ? " · Field" : ""}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <Label htmlFor="due">Due date</Label>
+              <Input
+                id="due"
+                type="date"
+                value={dueDate}
+                onChange={(e) => setDueDate(e.target.value)}
+              />
+            </div>
             <Button type="submit" size="sm" disabled={createTask.isPending}>
               Add task
             </Button>
@@ -229,21 +293,38 @@ export default function ProjectDetailPage() {
             {tasks?.items.map((item) => (
               <li
                 key={item.id}
-                className="flex items-center justify-between gap-2 rounded-lg bg-stone-50 px-3 py-2 dark:bg-stone-900"
+                className="space-y-2 rounded-lg bg-stone-50 px-3 py-2 dark:bg-stone-900"
               >
-                <div className="min-w-0">
-                  <p className="truncate font-medium">{item.title}</p>
-                  <StatusBadge status={item.status} />
+                <div className="flex items-center justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="truncate font-medium">{item.title}</p>
+                    <StatusBadge status={item.status} />
+                  </div>
+                  {item.status !== "done" && (
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      onClick={() => completeTask.mutate(item.id)}
+                    >
+                      Done
+                    </Button>
+                  )}
                 </div>
-                {item.status !== "done" && (
-                  <Button
-                    size="sm"
-                    variant="secondary"
-                    onClick={() => completeTask.mutate(item.id)}
-                  >
-                    Done
-                  </Button>
-                )}
+                <select
+                  className="w-full rounded-lg border border-stone-200 bg-white px-2 py-1.5 text-xs dark:border-stone-700 dark:bg-stone-950"
+                  value={item.assignee_id ?? ""}
+                  disabled={assignTask.isPending}
+                  onChange={(e) =>
+                    assignTask.mutate({ id: item.id, nextAssignee: e.target.value })
+                  }
+                >
+                  <option value="">Unassigned</option>
+                  {(users?.items ?? []).map((m) => (
+                    <option key={m.id} value={m.user_id}>
+                      {memberLabel.get(m.user_id) ?? m.user_id}
+                    </option>
+                  ))}
+                </select>
               </li>
             ))}
           </ul>

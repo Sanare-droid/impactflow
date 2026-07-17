@@ -164,6 +164,10 @@ class InviteUserRequest(BaseModel):
     send_invite: bool = True
 
 
+class UpdateMembershipRoleRequest(BaseModel):
+    role_id: UUID
+
+
 class OrganizationResponse(ORMModel):
     id: UUID
     name: str

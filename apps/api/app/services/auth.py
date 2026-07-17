@@ -688,6 +688,70 @@ async def invite_user(
     return user, temp_password, delivery
 
 
+async def update_membership_role(
+    db: AsyncSession,
+    *,
+    organization_id: UUID,
+    membership_id: UUID,
+    role_id: UUID,
+    actor: User,
+    ip_address: Optional[str] = None,
+    user_agent: Optional[str] = None,
+) -> OrganizationMembership:
+    membership = await db.scalar(
+        select(OrganizationMembership)
+        .options(
+            selectinload(OrganizationMembership.user),
+            selectinload(OrganizationMembership.role),
+        )
+        .where(
+            OrganizationMembership.id == membership_id,
+            OrganizationMembership.organization_id == organization_id,
+        )
+    )
+    if not membership:
+        raise NotFoundError("Membership not found")
+
+    role = await db.scalar(
+        select(Role).where(
+            Role.id == role_id,
+            Role.organization_id == organization_id,
+        )
+    )
+    if not role:
+        raise NotFoundError("Role not found in this organization")
+
+    previous_role_id = membership.role_id
+    previous_slug = membership.role.slug if membership.role else None
+    if previous_role_id == role.id:
+        return membership
+
+    membership.role_id = role.id
+    await db.flush()
+    await db.refresh(membership, attribute_names=["role", "user"])
+
+    await write_audit_log(
+        db,
+        action="users.role_change",
+        resource_type="membership",
+        resource_id=membership.id,
+        organization_id=organization_id,
+        actor_id=actor.id,
+        actor_email=actor.email,
+        description=f"Changed role for {membership.user.email if membership.user else membership.user_id} to {role.slug}",
+        changes={
+            "previous_role_id": str(previous_role_id),
+            "previous_role": previous_slug,
+            "role_id": str(role.id),
+            "role": role.slug,
+            "user_id": str(membership.user_id),
+        },
+        ip_address=ip_address,
+        user_agent=user_agent,
+    )
+    return membership
+
+
 def _validate_password_strength(password: str) -> str:
     if len(password) < settings.password_min_length:
         raise AppError(
