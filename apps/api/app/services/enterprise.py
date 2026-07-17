@@ -163,7 +163,7 @@ PLAN_SEED: list[dict[str, Any]] = [
         "ai_credits": None,
         "trial_days": 0,
         "features": ["*"],
-        "is_public": False,
+        "is_public": True,
         "sort_order": 4,
         "recommended": False,
         "description": "Custom quotation — procurement-ready billing with training, customization, and dedicated support",

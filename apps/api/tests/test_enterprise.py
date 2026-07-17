@@ -22,7 +22,8 @@ async def test_billing_plans_and_subscription(client: AsyncClient, org_a: dict):
     assert public.status_code == 200, public.text
     public_codes = {p["code"] for p in public.json()["items"]}
     assert "free" in public_codes
-    assert "government" not in public_codes
+    # Government is public with a custom quotation (contact sales); self-serve upgrade stays blocked.
+    assert "government" in public_codes
 
     sub = await client.get("/api/v1/billing/subscription", headers=headers)
     assert sub.status_code == 200, sub.text

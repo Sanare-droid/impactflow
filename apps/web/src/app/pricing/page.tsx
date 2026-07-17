@@ -52,7 +52,7 @@ const COMPARE_ROWS: { label: string; key: string }[] = [
 ];
 
 function formatPrice(plan: SubscriptionPlan, period: "monthly" | "annual") {
-  if (plan.contact_sales) return "Contact sales";
+  if (plan.contact_sales) return "Custom quote";
   const raw = period === "annual" ? plan.price_annual ?? plan.annual_price : plan.price_monthly ?? plan.monthly_price;
   if (raw == null || Number(raw) <= 0) return "KES 0";
   return `${plan.currency || "KES"} ${Number(raw).toLocaleString()}`;
@@ -160,7 +160,7 @@ export default function PricingPage() {
               </p>
             )}
 
-            <div className="mt-10 grid gap-6 md:grid-cols-2 xl:grid-cols-4">
+            <div className="mt-10 grid gap-6 md:grid-cols-2 xl:grid-cols-5">
               {plans.map((plan, idx) => {
                 const recommended = Boolean(plan.recommended);
                 const contact = Boolean(plan.contact_sales);

@@ -61,7 +61,7 @@ async def test_public_plans_kes_catalog(client: AsyncClient):
     assert float(by_code["free"]["price_monthly"] or 0) == 0
     assert float(by_code["starter"]["price_monthly"]) == 9900
     assert by_code["professional"]["recommended"] is True
-    assert "government" not in by_code
+    assert by_code["government"]["contact_sales"] is True
 
 
 def test_amount_to_subunit_kes_direct():
