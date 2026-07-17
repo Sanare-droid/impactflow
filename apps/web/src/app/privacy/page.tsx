@@ -3,7 +3,7 @@ import { PrivacyPolicyView } from "./privacy-policy-view";
 
 const siteUrl =
   process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "") ||
-  "https://impactflow.africa";
+  "https://impactflow.space";
 
 const title = "Privacy Policy";
 const description =
@@ -51,7 +51,7 @@ const jsonLd = {
     "@type": "Organization",
     name: "StemCloud Technologies",
     url: siteUrl,
-    email: "support@impactflow.africa",
+    email: "chris@impactflow.space",
   },
 };
 

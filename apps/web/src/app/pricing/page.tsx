@@ -199,7 +199,7 @@ export default function PricingPage() {
                     </ul>
                     {contact ? (
                       <a
-                        href="mailto:sales@impactflow.app?subject=ImpactFlow%20Government%20plan"
+                        href="mailto:chris@impactflow.space?subject=ImpactFlow%20Government%20plan"
                         className="mt-6 inline-flex justify-center rounded-md border border-[#1B2A4A] px-4 py-2.5 text-sm font-semibold text-[#1B2A4A] hover:bg-[#F7F4EC]"
                       >
                         Contact sales
@@ -213,7 +213,7 @@ export default function PricingPage() {
                           Start free trial
                         </Link>
                         <a
-                          href="mailto:sales@impactflow.app?subject=ImpactFlow%20Enterprise"
+                          href="mailto:chris@impactflow.space?subject=ImpactFlow%20Enterprise"
                           className="inline-flex justify-center rounded-md border border-[#1B2A4A] px-4 py-2.5 text-sm font-semibold text-[#1B2A4A]"
                         >
                           Contact sales

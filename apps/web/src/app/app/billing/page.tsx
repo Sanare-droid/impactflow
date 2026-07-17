@@ -259,7 +259,7 @@ function BillingInner() {
               </ul>
               {contact ? (
                 <a
-                  href="mailto:sales@impactflow.app"
+                  href="mailto:chris@impactflow.space"
                   className="mt-4 inline-flex h-10 items-center justify-center rounded-xl border border-stone-300 px-4 text-sm font-medium"
                 >
                   Contact sales

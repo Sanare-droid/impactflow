@@ -4,7 +4,7 @@ import { BrandLogo } from "@/components/brand-logo";
 
 const siteUrl =
   process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "") ||
-  "https://impactflow.africa";
+  "https://impactflow.space";
 
 export const metadata: Metadata = {
   title: "Terms of Service",
@@ -134,8 +134,8 @@ export default function TermsPage() {
             </h2>
             <p className="mt-2">
               StemCloud Technologies ·{" "}
-              <a href="mailto:support@impactflow.africa" className="text-[#0F766E] hover:underline">
-                support@impactflow.africa
+              <a href="mailto:chris@impactflow.space" className="text-[#0F766E] hover:underline">
+                chris@impactflow.space
               </a>
             </p>
           </section>

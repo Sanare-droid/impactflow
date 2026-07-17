@@ -461,9 +461,9 @@ export function PrivacyPolicyView() {
               your organization’s administrator first. You may also contact us at{" "}
               <a
                 className="font-medium text-[#0F766E] underline-offset-2 hover:underline"
-                href="mailto:support@impactflow.africa"
+                href="mailto:chris@impactflow.space"
               >
-                support@impactflow.africa
+                chris@impactflow.space
               </a>
               .
             </p>
@@ -548,9 +548,9 @@ export function PrivacyPolicyView() {
                 <dd>
                   <a
                     className="font-medium text-[#0F766E] underline-offset-2 hover:underline"
-                    href="mailto:support@impactflow.africa"
+                    href="mailto:chris@impactflow.space"
                   >
-                    support@impactflow.africa
+                    chris@impactflow.space
                   </a>
                 </dd>
               </div>
@@ -561,11 +561,11 @@ export function PrivacyPolicyView() {
                 <dd>
                   <a
                     className="font-medium text-[#0F766E] underline-offset-2 hover:underline"
-                    href="https://impactflow.africa"
+                    href="https://impactflow.space"
                     target="_blank"
                     rel="noopener noreferrer"
                   >
-                    https://impactflow.africa
+                    https://impactflow.space
                   </a>
                 </dd>
               </div>
@@ -576,11 +576,11 @@ export function PrivacyPolicyView() {
                 <dd>
                   <a
                     className="font-medium text-[#0F766E] underline-offset-2 hover:underline"
-                    href="https://impactflow.africa/contact"
+                    href="https://impactflow.space/contact"
                     target="_blank"
                     rel="noopener noreferrer"
                   >
-                    https://impactflow.africa/contact
+                    https://impactflow.space/contact
                   </a>
                 </dd>
               </div>
@@ -611,7 +611,7 @@ export function PrivacyPolicyView() {
               Security
             </a>
             <a
-              href="https://impactflow.africa/contact"
+              href="https://impactflow.space/contact"
               className="hover:text-[#16324F] dark:hover:text-stone-200"
               target="_blank"
               rel="noopener noreferrer"
@@ -619,7 +619,7 @@ export function PrivacyPolicyView() {
               Contact
             </a>
             <a
-              href="https://impactflow.africa"
+              href="https://impactflow.space"
               className="hover:text-[#16324F] dark:hover:text-stone-200"
               target="_blank"
               rel="noopener noreferrer"

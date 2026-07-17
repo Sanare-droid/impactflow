@@ -537,11 +537,28 @@ export default function HomePage() {
 
       <footer className="border-t border-[#E8E2D6] bg-[#FFFEFB]">
         <div className="mx-auto flex w-full max-w-6xl flex-col gap-8 px-5 py-10 md:flex-row md:items-center md:justify-between md:px-8">
-          <div className="inline-flex items-center gap-2.5">
-            <BrandLogo size={36} />
-            <span className="font-display text-lg font-semibold text-[#16324F]">
-              {APP_NAME}
-            </span>
+          <div className="space-y-2">
+            <div className="inline-flex items-center gap-2.5">
+              <BrandLogo size={36} />
+              <span className="font-display text-lg font-semibold text-[#16324F]">
+                {APP_NAME}
+              </span>
+            </div>
+            <p className="text-sm text-[#5A534B]">
+              <a
+                href="https://impactflow.space"
+                className="hover:text-[#16324F]"
+              >
+                impactflow.space
+              </a>
+              {" · "}
+              <a
+                href="mailto:chris@impactflow.space"
+                className="hover:text-[#16324F]"
+              >
+                chris@impactflow.space
+              </a>
+            </p>
           </div>
           <nav className="flex flex-wrap gap-5 text-sm text-[#5A534B]">
             {NAV.map((item) => (
@@ -555,6 +572,9 @@ export default function HomePage() {
             <Link href="/terms" className="hover:text-[#16324F]">
               Terms
             </Link>
+            <a href="mailto:chris@impactflow.space" className="hover:text-[#16324F]">
+              Contact
+            </a>
             <Link href="/login" className="hover:text-[#16324F]">
               Sign in
             </Link>
