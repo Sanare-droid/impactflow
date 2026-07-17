@@ -67,6 +67,7 @@ from app.models.workflow import (
     WorkflowVersion,
 )
 from app.models.enterprise import (
+    BillingInvoice,
     FeatureFlag,
     LocalizationPack,
     OnboardingState,
@@ -152,6 +153,7 @@ __all__ = [
     "ApiUsageLog",
     "SubscriptionPlan",
     "OrganizationSubscription",
+    "BillingInvoice",
     "FeatureFlag",
     "OrganizationDomain",
     "SsoConfiguration",

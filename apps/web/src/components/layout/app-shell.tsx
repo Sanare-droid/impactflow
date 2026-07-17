@@ -144,6 +144,7 @@ const navGroups: NavGroup[] = [
       { href: "/app/roles", label: "Roles", icon: Shield },
       { href: "/app/organization", label: "Organization", icon: Building2 },
       { href: "/app/billing", label: "Billing", icon: CreditCard },
+      { href: "/app/platform/billing", label: "Platform billing", icon: Landmark },
       { href: "/app/customer-success", label: "Success", icon: HeartPulse },
       { href: "/app/ops", label: "Operations", icon: Activity },
       { href: "/app/audit", label: "Audit", icon: ScrollText },

@@ -192,6 +192,9 @@ async def create_project(
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> ProjectResponse:
     org_id = _require_org(ctx)
+    from app.services import enterprise as ent
+
+    await ent.enforce_project_limit(db, org_id)
     ip, ua = client_meta(request)
     project = await program_service.create_project(
         db,

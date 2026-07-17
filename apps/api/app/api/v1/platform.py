@@ -129,6 +129,9 @@ async def install_app(
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> MarketplaceInstallationResponse:
     org_id = _require_org(ctx)
+    from app.services import enterprise as ent
+
+    await ent.require_feature(db, org_id, "marketplace")
     ip, ua = client_meta(request)
     row = await platform_service.install_app(
         db,

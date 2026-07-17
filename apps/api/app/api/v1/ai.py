@@ -90,6 +90,9 @@ async def create_conversation(
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> AiConversationResponse:
     org_id = _require_org(ctx)
+    from app.services import enterprise as ent
+
+    await ent.require_feature(db, org_id, "ai")
     ip, ua = client_meta(request)
     conv = await ai_service.create_conversation(
         db,

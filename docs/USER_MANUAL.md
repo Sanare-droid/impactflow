@@ -241,12 +241,15 @@ Use **live preview** on the right before saving. For DNS steps, see [CUSTOM_DOMA
 
 **Billing** (`/app/billing`):
 
-- View current plan and seats  
-- Switch Free / Starter / Professional / Enterprise / Government (as offered)  
-- Toggle monthly vs annual  
-- See which features are enabled for your org  
+- View current plan, trial countdown, seats, and projected renewal  
+- Upgrade/downgrade with monthly vs annual (Paystack checkout for paid plans)  
+- Usage meters (users, projects, storage, AI, API) and invoices  
+- Cancel at period end  
 
-Feature access is driven by plan + org overrides. Contact your platform operator for custom contracts.
+Public pricing: `/pricing` (KES catalog from the API — not hardcoded).  
+Platform admins: `/app/platform/billing` for MRR and Government assignments.  
+
+Feature access is driven by plan + org overrides. Exceeding limits returns a clear upgrade prompt (HTTP 402). See [BILLING.md](./BILLING.md) and [PRICING.md](./PRICING.md).
 
 ### 11.4 Security settings
 

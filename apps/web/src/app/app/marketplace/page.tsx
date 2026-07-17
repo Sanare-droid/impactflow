@@ -6,8 +6,17 @@ import { api } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
 import { StatusBadge } from "@/components/ui/status-badge";
+import { FeatureGate } from "@/components/feature-gate";
 
 export default function MarketplacePage() {
+  return (
+    <FeatureGate feature="marketplace" fallbackTitle="Marketplace requires Professional+">
+      <MarketplaceInner />
+    </FeatureGate>
+  );
+}
+
+function MarketplaceInner() {
   const qc = useQueryClient();
   const [error, setError] = useState<string | null>(null);
 

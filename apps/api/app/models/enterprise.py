@@ -41,12 +41,16 @@ class SubscriptionPlan(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     )  # monthly | annual | custom
     price_monthly: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False, default=0)
     price_annual: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False, default=0)
-    currency: Mapped[str] = mapped_column(String(3), nullable=False, default="USD")
+    currency: Mapped[str] = mapped_column(String(3), nullable=False, default="KES")
     seat_limit: Mapped[Optional[int]] = mapped_column(Integer)  # null = unlimited
     storage_gb: Mapped[Optional[int]] = mapped_column(Integer)
+    max_projects: Mapped[Optional[int]] = mapped_column(Integer)  # null = unlimited
+    api_limit: Mapped[Optional[int]] = mapped_column(Integer)  # monthly API calls; null = unlimited
+    ai_credits: Mapped[Optional[int]] = mapped_column(Integer)  # monthly AI credits; null = unlimited
     trial_days: Mapped[int] = mapped_column(Integer, nullable=False, default=14)
     features: Mapped[list] = mapped_column(JSONType, default=list, nullable=False)
     is_public: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    recommended: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     status: Mapped[str] = mapped_column(String(32), nullable=False, default="active")
     sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     metadata_: Mapped[dict] = mapped_column("metadata", JSONType, default=dict, nullable=False)
@@ -74,20 +78,60 @@ class OrganizationSubscription(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     )
     status: Mapped[str] = mapped_column(
         String(32), nullable=False, default="trialing", index=True
-    )  # trialing | active | past_due | suspended | cancelled | grace
+    )  # trialing | active | past_due | grace | cancelled | expired | suspended | renewing
     billing_period: Mapped[str] = mapped_column(String(16), nullable=False, default="monthly")
     seats: Mapped[int] = mapped_column(Integer, nullable=False, default=5)
     trial_ends_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
     current_period_start: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
     current_period_end: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    grace_ends_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    canceled_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
     cancel_at_period_end: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     provider: Mapped[str] = mapped_column(
         String(32), nullable=False, default="internal"
-    )  # internal | stripe | manual
+    )  # internal | paystack | stripe | manual
     provider_customer_id: Mapped[Optional[str]] = mapped_column(String(255))
     provider_subscription_id: Mapped[Optional[str]] = mapped_column(String(255))
     coupon_code: Mapped[Optional[str]] = mapped_column(String(64))
     discount_percent: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    metadata_: Mapped[dict] = mapped_column("metadata", JSONType, default=dict, nullable=False)
+
+
+class BillingInvoice(Base, UUIDPrimaryKeyMixin, TimestampMixin):
+    """Paid / open invoices generated from Paystack charges and renewals."""
+
+    __tablename__ = "billing_invoices"
+    __table_args__ = (UniqueConstraint("number", name="uq_billing_invoices_number"),)
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("organizations.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    subscription_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("organization_subscriptions.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    plan_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("subscription_plans.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    number: Mapped[str] = mapped_column(String(64), nullable=False)
+    amount: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False, default=0)
+    currency: Mapped[str] = mapped_column(String(3), nullable=False, default="KES")
+    status: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="paid", index=True
+    )  # paid | open | failed | void
+    billing_period: Mapped[str] = mapped_column(String(16), nullable=False, default="monthly")
+    period_start: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    period_end: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    paystack_reference: Mapped[Optional[str]] = mapped_column(String(128), index=True)
+    receipt_url: Mapped[Optional[str]] = mapped_column(String(1024))
+    paid_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
     metadata_: Mapped[dict] = mapped_column("metadata", JSONType, default=dict, nullable=False)
 
 

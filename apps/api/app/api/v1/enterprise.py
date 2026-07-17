@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, Query, Request
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import RequestContext, client_meta, require_permissions
+from app.api.deps import RequestContext, client_meta, get_current_context, require_permissions
 from app.core.exceptions import NotFoundError
 from app.db.session import get_db
 from app.schemas import ORMModel, PaginatedResponse, PaginationMeta
@@ -47,15 +47,27 @@ class PlanResponse(ORMModel):
     description: Optional[str] = None
     tier: str
     billing_period: str
-    price_monthly: Any
-    price_annual: Any
+    price_monthly: Any = None
+    price_annual: Any = None
+    monthly_price: Any = None
+    annual_price: Any = None
     currency: str
     seat_limit: Optional[int] = None
+    max_users: Optional[int] = None
     storage_gb: Optional[int] = None
+    max_storage: Optional[int] = None
+    max_projects: Optional[int] = None
+    api_limit: Optional[int] = None
+    ai_credits: Optional[int] = None
     trial_days: int
     features: list = Field(default_factory=list)
+    feature_flags: list = Field(default_factory=list)
     is_public: bool
+    recommended: bool = False
     sort_order: int
+    display_order: Optional[int] = None
+    active: bool = True
+    contact_sales: bool = False
 
 
 class ChangePlanRequest(BaseModel):
@@ -183,9 +195,10 @@ async def list_billing_plans(
 ) -> PaginatedResponse[PlanResponse]:
     _require_org(ctx)
     rows = await ent.list_plans(db, public_only=False)
+    items = [PlanResponse.model_validate(ent.plan_payload(r)) for r in rows]
     return PaginatedResponse(
-        items=[PlanResponse.model_validate(r) for r in rows],
-        meta=_meta(1, len(rows) or 1, len(rows)),
+        items=items,
+        meta=_meta(1, len(items) or 1, len(items)),
     )
 
 
@@ -195,9 +208,10 @@ async def public_billing_plans(
 ) -> PaginatedResponse[PlanResponse]:
     """Marketing / landing page catalog — no auth."""
     rows = await ent.list_plans(db, public_only=True)
+    items = [PlanResponse.model_validate(ent.plan_payload(r)) for r in rows]
     return PaginatedResponse(
-        items=[PlanResponse.model_validate(r) for r in rows],
-        meta=_meta(1, len(rows) or 1, len(rows)),
+        items=items,
+        meta=_meta(1, len(items) or 1, len(items)),
     )
 
 
@@ -212,6 +226,123 @@ async def get_subscription(
     sub = await ent.get_or_create_subscription(db, org_id)
     plan = await db.get(SubscriptionPlan, sub.plan_id)
     return ent.subscription_payload(sub, plan)
+
+
+class CancelSubscriptionRequest(BaseModel):
+    at_period_end: bool = True
+
+
+@router.post("/billing/subscription/cancel")
+async def cancel_subscription(
+    body: CancelSubscriptionRequest,
+    request: Request,
+    ctx: Annotated[RequestContext, Depends(require_permissions(*BILLING_MANAGE))],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> dict[str, Any]:
+    from app.models.enterprise import SubscriptionPlan
+    from app.services import billing_emails
+
+    org_id = _require_org(ctx)
+    ip, ua = client_meta(request)
+    sub = await ent.cancel_subscription(
+        db,
+        organization_id=org_id,
+        actor_id=ctx.user.id,
+        actor_email=ctx.user.email,
+        at_period_end=body.at_period_end,
+        ip_address=ip,
+        user_agent=ua,
+    )
+    if ctx.organization:
+        await billing_emails.subscription_cancelled(
+            ctx.user.email, org_name=ctx.organization.name
+        )
+    plan = await db.get(SubscriptionPlan, sub.plan_id)
+    return ent.subscription_payload(sub, plan)
+
+
+@router.get("/billing/usage")
+async def billing_usage(
+    ctx: Annotated[RequestContext, Depends(require_permissions(*BILLING))],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> dict[str, Any]:
+    org_id = _require_org(ctx)
+    return await ent.usage_snapshot(db, org_id)
+
+
+@router.get("/billing/invoices")
+async def billing_invoices(
+    ctx: Annotated[RequestContext, Depends(require_permissions(*BILLING))],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> dict[str, Any]:
+    org_id = _require_org(ctx)
+    rows = await ent.list_invoices(db, org_id)
+    return {"items": [ent.invoice_payload(r) for r in rows]}
+
+
+@router.get("/platform/billing/analytics")
+async def platform_billing_analytics(
+    ctx: Annotated[RequestContext, Depends(get_current_context)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> dict[str, Any]:
+    if not (ctx.user.is_platform_admin or ctx.user.is_superuser):
+        from app.core.exceptions import ForbiddenError
+
+        raise ForbiddenError("Platform admin required")
+    return await ent.platform_billing_analytics(db)
+
+
+class AssignPlanRequest(BaseModel):
+    organization_id: UUID
+    plan_code: str = Field(min_length=1, max_length=64)
+    billing_period: str = Field(default="monthly", max_length=16)
+
+
+@router.post("/platform/billing/assign")
+async def platform_assign_plan(
+    body: AssignPlanRequest,
+    request: Request,
+    ctx: Annotated[RequestContext, Depends(get_current_context)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> dict[str, Any]:
+    if not (ctx.user.is_platform_admin or ctx.user.is_superuser):
+        from app.core.exceptions import ForbiddenError
+
+        raise ForbiddenError("Platform admin required")
+    from app.models.enterprise import SubscriptionPlan
+
+    ip, ua = client_meta(request)
+    sub = await ent.assign_plan_manual(
+        db,
+        organization_id=body.organization_id,
+        plan_code=body.plan_code,
+        actor_id=ctx.user.id,
+        actor_email=ctx.user.email,
+        billing_period=body.billing_period,
+        provider="manual",
+        ip_address=ip,
+        user_agent=ua,
+    )
+    plan = await db.get(SubscriptionPlan, sub.plan_id)
+    return ent.subscription_payload(sub, plan)
+
+
+@router.post("/internal/billing/run-lifecycle")
+async def run_billing_lifecycle(
+    request: Request,
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> dict[str, Any]:
+    from app.core.config import settings
+    from app.services import billing_lifecycle
+    from fastapi import HTTPException
+
+    secret = (settings.billing_cron_secret or "").strip()
+    header = (request.headers.get("x-billing-cron-secret") or "").strip()
+    if not secret or header != secret:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    result = await billing_lifecycle.run_billing_lifecycle(db)
+    await db.commit()
+    return result
 
 
 class PaystackCheckoutRequest(BaseModel):

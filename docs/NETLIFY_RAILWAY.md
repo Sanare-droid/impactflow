@@ -82,8 +82,20 @@ python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().d
 | `SMTP_FROM` | Sender, e.g. `ImpactFlow <noreply@yourdomain.com>` (or `onboarding@resend.dev` while testing) |
 | `PAYSTACK_SECRET_KEY` | Paystack secret key — enables live checkout for paid plans |
 | `PAYSTACK_PUBLIC_KEY` | Paystack public key |
-| `PAYSTACK_CURRENCY` | e.g. `NGN` (default) |
-| `PAYSTACK_USD_TO_LOCAL` | FX for USD catalog → local (default `1600`) |
+| `PAYSTACK_CURRENCY` | `KES` (catalog prices are KES; charge amount × 100) |
+| `PAYSTACK_USD_TO_LOCAL` | Legacy FX (unused when prices are already KES; default `1`) |
+| `BILLING_CRON_SECRET` | Shared secret for `POST /api/v1/internal/billing/run-lifecycle` |
+| `SALES_EMAIL` | Contact sales address (default `sales@impactflow.app`) |
+
+### Paystack webhook & renewal cron
+
+1. In Paystack Dashboard → Settings → API Keys & Webhooks, set webhook URL to:
+   `https://YOUR-API.up.railway.app/api/v1/billing/paystack/webhook`
+2. Events: `charge.success` (required); failed charge events optional.
+3. Callback URL used by initialize: `{FRONTEND_URL}/app/billing?paystack=1` (server still verifies).
+4. Optional Railway cron (hourly):  
+   `POST /api/v1/internal/billing/run-lifecycle` with header `X-Billing-Cron-Secret: $BILLING_CRON_SECRET`  
+   The API jobs loop also runs lifecycle at most once per hour when `JOBS_ENABLED=true`.
 
 Netlify deploy URLs (`*.netlify.app`) are also allowed via `BACKEND_CORS_ORIGIN_REGEX` by default.
 

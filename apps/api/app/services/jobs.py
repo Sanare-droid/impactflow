@@ -25,6 +25,8 @@ logger = logging.getLogger(__name__)
 BACKOFF_SECONDS = [60, 300, 900, 3600, 7200]
 EVENT_BUDGET_BURN = "budget.burn"
 EVENT_GRANT_EXPIRING = "grant.expiring"
+_last_billing_run: float | None = None
+BILLING_INTERVAL_SECONDS = 3600
 
 
 def _slack_body(payload: dict[str, Any]) -> dict[str, Any]:
@@ -300,6 +302,19 @@ async def run_job_tick() -> dict[str, int]:
         grants_expiring = await scan_grant_expiring(db)
         sched = await workflows.process_due_schedules(db)
         runs = await workflows.process_run_queue(db, limit=20)
+        billing: dict[str, Any] = {}
+        try:
+            import time
+
+            from app.services import billing_lifecycle
+
+            global _last_billing_run
+            now_ts = time.time()
+            if _last_billing_run is None or (now_ts - _last_billing_run) >= BILLING_INTERVAL_SECONDS:
+                billing = await billing_lifecycle.run_billing_lifecycle(db)
+                _last_billing_run = now_ts
+        except Exception:  # noqa: BLE001
+            logger.exception("billing.lifecycle_failed")
         await db.commit()
         return {
             "webhooks_processed": webhooks,
@@ -308,6 +323,8 @@ async def run_job_tick() -> dict[str, int]:
             "grants_expiring_notified": grants_expiring,
             "workflow_schedules_enqueued": sched,
             "workflow_runs_processed": runs.get("processed", 0),
+            "billing_renewals_ok": int(billing.get("renewals_ok") or 0),
+            "billing_emails": int(billing.get("emails") or 0),
         }
 
 

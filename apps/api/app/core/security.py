@@ -52,6 +52,30 @@ def create_access_token(
     return jwt.encode(payload, settings.jwt_secret_key, algorithm=settings.jwt_algorithm)
 
 
+def create_email_verify_token(user_id: str | UUID, *, hours: int = 48) -> str:
+    now = datetime.now(timezone.utc)
+    payload = {
+        "sub": str(user_id),
+        "type": "email_verify",
+        "iat": now,
+        "exp": now + timedelta(hours=hours),
+        "jti": secrets.token_urlsafe(12),
+    }
+    return jwt.encode(payload, settings.jwt_secret_key, algorithm=settings.jwt_algorithm)
+
+
+def decode_email_verify_token(token: str) -> UUID:
+    try:
+        payload = jwt.decode(
+            token, settings.jwt_secret_key, algorithms=[settings.jwt_algorithm]
+        )
+    except JWTError as exc:
+        raise ValueError("Invalid or expired verification token") from exc
+    if payload.get("type") != "email_verify":
+        raise ValueError("Invalid verification token type")
+    return UUID(str(payload["sub"]))
+
+
 def create_refresh_token(subject: str | UUID) -> tuple[str, str, datetime]:
     """Return (raw_token, token_hash, expires_at). Store only the hash."""
     now = datetime.now(timezone.utc)

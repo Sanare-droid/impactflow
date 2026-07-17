@@ -59,6 +59,20 @@ async def register(
     )
 
 
+@router.post("/verify-email", response_model=MessageResponse)
+async def verify_email(
+    body: dict,
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> MessageResponse:
+    token = (body or {}).get("token") or ""
+    if not token:
+        from app.core.exceptions import AppError
+
+        raise AppError("Verification token required", status_code=400)
+    await auth_service.verify_email_token(db, str(token))
+    return MessageResponse(message="Email verified successfully")
+
+
 @router.post("/login", response_model=TokenResponse)
 async def login(
     body: LoginRequest,

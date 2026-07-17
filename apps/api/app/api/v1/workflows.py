@@ -513,6 +513,9 @@ async def run_workflow(
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> WorkflowRunOut:
     org_id = _require_org(ctx)
+    from app.services import enterprise as ent
+
+    await ent.require_feature(db, org_id, "workflows")
     workflow = await workflow_service.get_workflow(db, org_id, workflow_id)
     run = await workflow_service.enqueue_manual_run(
         db, workflow, actor_id=ctx.user.id, inputs=body.inputs

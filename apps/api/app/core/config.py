@@ -86,9 +86,12 @@ class Settings(BaseSettings):
     # Paystack billing (optional — without keys, plan changes stay internal)
     paystack_secret_key: str = ""
     paystack_public_key: str = ""
-    paystack_currency: str = "NGN"
-    # When plans are priced in USD and Paystack currency is NGN/GHS/KES
-    paystack_usd_to_local: float = 1600.0
+    paystack_currency: str = "KES"
+    # Legacy FX helper (unused when catalog prices are already in KES)
+    paystack_usd_to_local: float = 1.0
+    # Optional secret for POST /internal/billing/run-lifecycle (Railway cron)
+    billing_cron_secret: str = ""
+    sales_email: str = "sales@impactflow.app"
 
     # Background jobs
     jobs_poll_seconds: int = 30

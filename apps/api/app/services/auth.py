@@ -22,7 +22,9 @@ from app.core.exceptions import (
 from app.core.permissions import PERMISSION_CATALOG, SYSTEM_ROLES
 from app.core.security import (
     create_access_token,
+    create_email_verify_token,
     create_refresh_token,
+    decode_email_verify_token,
     decrypt_secret,
     encrypt_secret,
     generate_mfa_secret,
@@ -246,7 +248,35 @@ async def register_organization(
         user_agent=user_agent,
     )
 
+    # Provision Free Trial subscription + branding + onboarding
+    from app.services import billing_emails
+    from app.services import enterprise as ent
+    from app.services import platform as platform_service
+
+    await ent.get_or_create_subscription(db, org.id, plan_code="free")
+    await platform_service.get_branding(db, org.id)
+    await ent.get_or_create_onboarding(db, org.id)
+    await billing_emails.trial_started(user.email, org_name=org.name, days=14)
+
+    verify_token = create_email_verify_token(user.id)
+    frontend = (settings.frontend_url or "").rstrip("/")
+    verify_url = f"{frontend}/verify-email?token={verify_token}"
+    await billing_emails.email_verification(user.email, verify_url=verify_url)
+
     return org, user, access, refresh
+
+
+async def verify_email_token(db: AsyncSession, token: str) -> User:
+    try:
+        user_id = decode_email_verify_token(token)
+    except ValueError as exc:
+        raise AppError(str(exc), status_code=400) from exc
+    user = await db.get(User, user_id)
+    if not user:
+        raise NotFoundError("User not found")
+    user.email_verified = True
+    await db.flush()
+    return user
 
 
 async def issue_tokens(

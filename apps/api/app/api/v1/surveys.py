@@ -287,6 +287,9 @@ async def create_survey(
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> SurveyOut:
     org_id = _require_org(ctx)
+    from app.services import enterprise as ent
+
+    await ent.require_feature(db, org_id, "surveys")
     ip, ua = client_meta(request)
     row = await survey_service.create_survey(
         db,

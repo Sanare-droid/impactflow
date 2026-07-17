@@ -161,6 +161,9 @@ async def invite_user(
 ) -> dict:
     if not ctx.organization:
         raise NotFoundError("No active organization context")
+    from app.services import enterprise as ent
+
+    await ent.enforce_seat_limit(db, ctx.organization.id)
     ip, ua = client_meta(request)
     user, temp_password, delivery = await auth_service.invite_user(
         db,

@@ -1226,15 +1226,27 @@ export type SubscriptionPlan = {
   description?: string | null;
   tier: string;
   billing_period: string;
-  price_monthly: number;
-  price_annual: number;
+  price_monthly?: number | null;
+  price_annual?: number | null;
+  monthly_price?: number | null;
+  annual_price?: number | null;
   currency: string;
   seat_limit?: number | null;
+  max_users?: number | null;
   storage_gb?: number | null;
+  max_storage?: number | null;
+  max_projects?: number | null;
+  api_limit?: number | null;
+  ai_credits?: number | null;
   trial_days: number;
   features: string[];
+  feature_flags?: string[];
   is_public: boolean;
+  recommended?: boolean;
   sort_order: number;
+  display_order?: number;
+  active?: boolean;
+  contact_sales?: boolean;
 };
 
 export type OrganizationSubscription = {
@@ -1244,22 +1256,64 @@ export type OrganizationSubscription = {
   billing_period: string;
   seats: number;
   trial_ends_at?: string | null;
+  days_remaining?: number | null;
+  current_period_start?: string | null;
   current_period_end?: string | null;
+  grace_ends_at?: string | null;
+  canceled_at?: string | null;
+  cancel_at_period_end?: boolean;
   provider: string;
   coupon_code?: string | null;
   discount_percent: number;
-  plan?: {
-    id: string;
-    code: string;
-    name: string;
-    tier: string;
-    price_monthly: number;
-    price_annual: number;
-    currency: string;
-    seat_limit?: number | null;
-    storage_gb?: number | null;
-    features: string[];
-  } | null;
+  plan?: SubscriptionPlan | null;
+};
+
+export type BillingInvoice = {
+  id: string;
+  organization_id: string;
+  subscription_id: string;
+  plan_id?: string | null;
+  number: string;
+  amount: number;
+  currency: string;
+  status: string;
+  billing_period: string;
+  period_start?: string | null;
+  period_end?: string | null;
+  paystack_reference?: string | null;
+  receipt_url?: string | null;
+  paid_at?: string | null;
+  created_at?: string | null;
+};
+
+export type BillingUsage = {
+  subscription: OrganizationSubscription;
+  users: { used: number; limit?: number | null };
+  projects: { used: number; limit?: number | null };
+  storage_gb: { used: number; limit?: number | null };
+  ai_credits: { used: number; limit?: number | null };
+  api_calls: { used: number; limit?: number | null };
+  projected_renewal: { amount: number; currency: string; at?: string | null };
+};
+
+export type PlatformBillingAnalytics = {
+  mrr: number;
+  arr: number;
+  revenue: number;
+  active_organizations: number;
+  trials: number;
+  conversions: number;
+  failed_payments: number;
+  grace_period_accounts: number;
+  expired_accounts: number;
+  government_accounts: number;
+  enterprise_contracts: number;
+  most_popular_plan?: string | null;
+  average_revenue_per_organization: number;
+  churn: number;
+  growth: number;
+  plan_distribution: Record<string, number>;
+  currency: string;
 };
 
 export type OrgDomain = {
@@ -2906,6 +2960,43 @@ class ApiClient {
     return this.request<{ mode: string; subscription?: OrganizationSubscription }>(
       `/billing/paystack/verify?reference=${encodeURIComponent(reference)}`,
     );
+  }
+
+  getBillingUsage() {
+    return this.request<BillingUsage>("/billing/usage");
+  }
+
+  listBillingInvoices() {
+    return this.request<{ items: BillingInvoice[] }>("/billing/invoices");
+  }
+
+  cancelSubscription(at_period_end = true) {
+    return this.request<OrganizationSubscription>("/billing/subscription/cancel", {
+      method: "POST",
+      body: JSON.stringify({ at_period_end }),
+    });
+  }
+
+  getPlatformBillingAnalytics() {
+    return this.request<PlatformBillingAnalytics>("/platform/billing/analytics");
+  }
+
+  assignPlatformPlan(body: {
+    organization_id: string;
+    plan_code: string;
+    billing_period?: string;
+  }) {
+    return this.request<OrganizationSubscription>("/platform/billing/assign", {
+      method: "POST",
+      body: JSON.stringify(body),
+    });
+  }
+
+  verifyEmail(token: string) {
+    return this.request<{ message: string }>("/auth/verify-email", {
+      method: "POST",
+      body: JSON.stringify({ token }),
+    });
   }
 
   getFeatures(environment = "production") {
