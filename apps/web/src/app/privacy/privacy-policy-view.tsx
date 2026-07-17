@@ -576,11 +576,9 @@ export function PrivacyPolicyView() {
                 <dd>
                   <a
                     className="font-medium text-[#0F766E] underline-offset-2 hover:underline"
-                    href="https://impactflow.space/contact"
-                    target="_blank"
-                    rel="noopener noreferrer"
+                    href="mailto:chris@impactflow.space"
                   >
-                    https://impactflow.space/contact
+                    chris@impactflow.space
                   </a>
                 </dd>
               </div>
@@ -611,10 +609,8 @@ export function PrivacyPolicyView() {
               Security
             </a>
             <a
-              href="https://impactflow.space/contact"
+              href="mailto:chris@impactflow.space"
               className="hover:text-[#16324F] dark:hover:text-stone-200"
-              target="_blank"
-              rel="noopener noreferrer"
             >
               Contact
             </a>
